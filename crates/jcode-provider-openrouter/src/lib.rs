@@ -603,6 +603,11 @@ pub fn is_kimi_model(model: &str) -> bool {
     lower.contains("moonshotai/") || lower.contains("kimi-k2") || lower.contains("kimi-k2.5")
 }
 
+pub fn is_deepseek_model(model: &str) -> bool {
+    let lower = model.to_lowercase();
+    lower.contains("deepseek") || lower.starts_with("deepseek-")
+}
+
 pub fn rank_providers_from_endpoints(endpoints: &[EndpointInfo]) -> Vec<String> {
     if endpoints.is_empty() {
         return Vec::new();

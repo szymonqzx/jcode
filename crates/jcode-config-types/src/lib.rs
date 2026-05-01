@@ -267,6 +267,7 @@ pub enum NamedProviderType {
     #[default]
     OpenAiCompatible,
     OpenRouter,
+    Windsurf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
