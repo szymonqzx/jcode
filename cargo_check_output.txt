@@ -1,0 +1,68 @@
+warning: unused import: `jcode_core::stdin_detect::*`
+   --> src\stdin_detect.rs:304:9
+    |
+304 | pub use jcode_core::stdin_detect::*;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unreachable statement
+   --> src\build\paths.rs:170:5
+    |
+161 | /         return SelfDevBuildCommand {
+162 | |             program: "cmd.exe".to_string(),
+163 | |             args: vec!["/C".to_string(), command.clone()],
+164 | |             display: command,
+165 | |         };
+    | |_________- any code following this expression is unreachable
+...
+170 |       let command = display_build_command_with_profile("cargo", &specs, profile);
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unreachable statement
+    |
+    = note: `#[warn(unreachable_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `display_build_command` is never used
+   --> src\build\paths.rs:178:4
+    |
+178 | fn display_build_command(program: &str, specs: &[(&str, &str)]) -> String {
+    |    ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `shell_escape` is never used
+   --> src\build\paths.rs:234:4
+    |
+234 | fn shell_escape(value: &str) -> String {
+    |    ^^^^^^^^^^^^
+
+warning: variant `System` is never constructed
+  --> src\provider\windsurf.rs:44:5
+   |
+42 | enum ChatMessageSource {
+   |      ----------------- variant in this enum
+43 |     User = 1,
+44 |     System = 2,
+   |     ^^^^^^
+   |
+   = note: `ChatMessageSource` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: function `push_unique_terminal` is never used
+   --> src\tui\app\helpers.rs:489:4
+    |
+489 | fn push_unique_terminal(candidates: &mut Vec<String>, term: impl Into<String>) {
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `detected_resume_terminal` is never used
+   --> src\tui\app\helpers.rs:499:4
+    |
+499 | fn detected_resume_terminal() -> Option<&'static str> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `resume_terminal_candidates_windows` is never used
+   --> src\tui\app\helpers.rs:595:4
+    |
+595 | fn resume_terminal_candidates_windows() -> Vec<String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `jcode` (lib) generated 8 warnings (run `cargo fix --lib -p jcode` to apply 1 suggestion)
+    Finished `dev` profile [optimized] target(s) in 0.86s
