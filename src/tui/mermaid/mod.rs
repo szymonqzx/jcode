@@ -12,13 +12,23 @@
 //! - Skip redundant renders when nothing changed
 //! - Clear only on render failure, not before every render
 
-use jcode_tui_workspace::color_support::rgb;
+use crate::tui::workspace::color_support::rgb;
 #[path = "mermaid_active.rs"]
 mod active;
+#[path = "mermaid_cache_render.rs"]
+mod cache_render;
+#[path = "mermaid_content.rs"]
+mod content;
 #[path = "mermaid_debug.rs"]
 mod debug_support;
+#[path = "mermaid_runtime.rs"]
+mod runtime;
 #[path = "mermaid_svg.rs"]
 mod svg;
+#[path = "mermaid_viewport.rs"]
+mod viewport;
+#[path = "mermaid_widget.rs"]
+mod widget;
 use base64::Engine as _;
 use image::DynamicImage;
 use image::GenericImageView;

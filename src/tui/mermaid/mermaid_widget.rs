@@ -278,7 +278,7 @@ pub fn render_image_widget(
     // Render failed - clear the area to avoid showing stale content
     let clr_area = area.intersection(buf_area);
     if clr_area.width > 0 && clr_area.height > 0 {
-        jcode_tui_workspace::color_support::clear_buf(clr_area, buf);
+        crate::tui::workspace::color_support::clear_buf(clr_area, buf);
     }
 
     0
@@ -492,7 +492,7 @@ fn render_image_widget_fit_inner(
 
     let clr_area = area.intersection(buf_area);
     if clr_area.width > 0 && clr_area.height > 0 {
-        jcode_tui_workspace::color_support::clear_buf(clr_area, buf);
+        crate::tui::workspace::color_support::clear_buf(clr_area, buf);
     }
 
     0

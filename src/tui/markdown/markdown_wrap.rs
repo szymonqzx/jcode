@@ -1,4 +1,4 @@
-use jcode_tui_workspace::color_support::rgb;
+use crate::tui::workspace::color_support::rgb;
 use ratatui::prelude::*;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 

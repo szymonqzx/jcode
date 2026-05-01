@@ -10,7 +10,7 @@ use syntect::highlighting::{Style as SynStyle, ThemeSet};
 use syntect::parsing::SyntaxSet;
 use unicode_width::UnicodeWidthStr;
 
-use jcode_tui_mermaid as mermaid;
+use crate::tui::mermaid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize)]
 pub enum DiagramDisplayMode {
@@ -721,7 +721,7 @@ fn rendered_rule_width(max_width: Option<usize>) -> usize {
 }
 
 // Colors matching ui.rs palette
-use jcode_tui_workspace::color_support::rgb;
+use crate::tui::workspace::color_support::rgb;
 fn code_bg() -> Color {
     rgb(45, 45, 45)
 }

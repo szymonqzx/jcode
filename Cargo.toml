@@ -30,14 +30,11 @@ members = [
     "crates/jcode-provider-core",
     "crates/jcode-provider-openrouter",
     "crates/jcode-provider-gemini",
-    "crates/jcode-tui-markdown",
     "crates/jcode-usage-types",
     "crates/jcode-tui-core",
-    "crates/jcode-tui-mermaid",
     "crates/jcode-task-types",
     "crates/jcode-tui-render",
     "crates/jcode-terminal-launch",
-    "crates/jcode-tui-workspace",
     "crates/jcode-mobile-core",
     "crates/jcode-mobile-sim",
     "crates/jcode-desktop",
@@ -120,12 +117,9 @@ jcode-provider-metadata = { path = "crates/jcode-provider-metadata" }
 jcode-provider-core = { path = "crates/jcode-provider-core" }
 jcode-provider-openrouter = { path = "crates/jcode-provider-openrouter" }
 jcode-provider-gemini = { path = "crates/jcode-provider-gemini" }
-jcode-tui-markdown = { path = "crates/jcode-tui-markdown" }
 jcode-tui-core = { path = "crates/jcode-tui-core" }
-jcode-tui-mermaid = { path = "crates/jcode-tui-mermaid" }
 jcode-tui-render = { path = "crates/jcode-tui-render" }
 jcode-terminal-launch = { path = "crates/jcode-terminal-launch" }
-jcode-tui-workspace = { path = "crates/jcode-tui-workspace" }
 jcode-usage-types = { path = "crates/jcode-usage-types" }
 
 # Streaming
@@ -139,6 +133,10 @@ arboard = "3"              # Clipboard support
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }  # Only PNG/JPEG (skip avif/rav1e, exr, gif, tiff, etc)
 
 # Markdown & syntax highlighting
+pulldown-cmark = "0.12"
+syntect = { version = "5", default-features = false, features = ["default-syntaxes", "default-themes", "regex-fancy"] }
+mermaid-rs-renderer = "0.4"
+base64 = "0.22"
 unicode-width = "0.2"   # Unicode character display width
 
 # PDF parsing (behind feature flag)
