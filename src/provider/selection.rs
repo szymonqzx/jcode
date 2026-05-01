@@ -8,7 +8,9 @@ pub(super) enum ActiveProvider {
     Antigravity,
     Gemini,
     Cursor,
+    Windsurf,
     OpenRouter,
+    OpenCodeGo,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -19,7 +21,9 @@ pub(super) struct ProviderAvailability {
     pub(super) antigravity: bool,
     pub(super) gemini: bool,
     pub(super) cursor: bool,
+    pub(super) windsurf: bool,
     pub(super) openrouter: bool,
+    pub(super) opencode_go: bool,
     pub(super) copilot_premium_zero: bool,
 }
 
@@ -32,7 +36,9 @@ impl ProviderAvailability {
             ActiveProvider::Antigravity => self.antigravity,
             ActiveProvider::Gemini => self.gemini,
             ActiveProvider::Cursor => self.cursor,
+            ActiveProvider::Windsurf => self.windsurf,
             ActiveProvider::OpenRouter => self.openrouter,
+            ActiveProvider::OpenCodeGo => self.opencode_go,
         }
     }
 }
@@ -53,8 +59,12 @@ impl MultiProvider {
             ActiveProvider::Gemini
         } else if availability.cursor {
             ActiveProvider::Cursor
+        } else if availability.windsurf {
+            ActiveProvider::Windsurf
         } else if availability.openrouter {
             ActiveProvider::OpenRouter
+        } else if availability.opencode_go {
+            ActiveProvider::OpenCodeGo
         } else {
             ActiveProvider::Claude
         }
@@ -68,7 +78,9 @@ impl MultiProvider {
             "antigravity" => Some(ActiveProvider::Antigravity),
             "gemini" => Some(ActiveProvider::Gemini),
             "cursor" => Some(ActiveProvider::Cursor),
+            "windsurf" => Some(ActiveProvider::Windsurf),
             "openrouter" => Some(ActiveProvider::OpenRouter),
+            "opencode-go" | "opencode" => Some(ActiveProvider::OpenCodeGo),
             _ => None,
         }
     }
@@ -95,7 +107,9 @@ impl MultiProvider {
             ActiveProvider::Antigravity => "Antigravity",
             ActiveProvider::Gemini => "Gemini",
             ActiveProvider::Cursor => "Cursor",
+            ActiveProvider::Windsurf => "Windsurf",
             ActiveProvider::OpenRouter => "OpenRouter",
+            ActiveProvider::OpenCodeGo => "OpenCode Go",
         }
     }
 
@@ -107,7 +121,9 @@ impl MultiProvider {
             ActiveProvider::Antigravity => "antigravity",
             ActiveProvider::Gemini => "gemini",
             ActiveProvider::Cursor => "cursor",
+            ActiveProvider::Windsurf => "windsurf",
             ActiveProvider::OpenRouter => "openrouter",
+            ActiveProvider::OpenCodeGo => "opencode-go",
         }
     }
 

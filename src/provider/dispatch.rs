@@ -150,6 +150,18 @@ impl MultiProvider {
                     ))
                 }
             }
+            ActiveProvider::Windsurf => {
+                let windsurf = self.windsurf_provider();
+                if let Some(windsurf) = windsurf {
+                    windsurf
+                        .complete(messages, tools, system, resume_session_id)
+                        .await
+                } else {
+                    Err(anyhow::anyhow!(
+                        "Windsurf is not available. Make sure Windsurf is running."
+                    ))
+                }
+            }
             ActiveProvider::OpenRouter => {
                 let openrouter = self
                     .openrouter
@@ -163,6 +175,18 @@ impl MultiProvider {
                 } else {
                     Err(anyhow::anyhow!(
                         "OpenRouter credentials not available. Set OPENROUTER_API_KEY environment variable."
+                    ))
+                }
+            }
+            ActiveProvider::OpenCodeGo => {
+                let opencode_go = self.opencode_go_provider();
+                if let Some(opencode_go) = opencode_go {
+                    opencode_go
+                        .complete(messages, tools, system, resume_session_id)
+                        .await
+                } else {
+                    Err(anyhow::anyhow!(
+                        "OpenCode Go credentials not available. Set OPENCODE_GO_API_KEY environment variable."
                     ))
                 }
             }
@@ -308,6 +332,24 @@ impl MultiProvider {
                     ))
                 }
             }
+            ActiveProvider::Windsurf => {
+                let windsurf = self.windsurf_provider();
+                if let Some(windsurf) = windsurf {
+                    windsurf
+                        .complete_split(
+                            messages,
+                            tools,
+                            system_static,
+                            system_dynamic,
+                            resume_session_id,
+                        )
+                        .await
+                } else {
+                    Err(anyhow::anyhow!(
+                        "Windsurf is not available. Make sure Windsurf is running."
+                    ))
+                }
+            }
             ActiveProvider::OpenRouter => {
                 let openrouter = self
                     .openrouter
@@ -327,6 +369,24 @@ impl MultiProvider {
                 } else {
                     Err(anyhow::anyhow!(
                         "OpenRouter credentials not available. Set OPENROUTER_API_KEY environment variable."
+                    ))
+                }
+            }
+            ActiveProvider::OpenCodeGo => {
+                let opencode_go = self.opencode_go_provider();
+                if let Some(opencode_go) = opencode_go {
+                    opencode_go
+                        .complete_split(
+                            messages,
+                            tools,
+                            system_static,
+                            system_dynamic,
+                            resume_session_id,
+                        )
+                        .await
+                } else {
+                    Err(anyhow::anyhow!(
+                        "OpenCode Go credentials not available. Set OPENCODE_GO_API_KEY environment variable."
                     ))
                 }
             }

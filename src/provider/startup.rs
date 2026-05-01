@@ -76,7 +76,9 @@ impl MultiProvider {
         let has_antigravity_creds = auth::antigravity::load_tokens().is_ok();
         let has_gemini_creds = auth::gemini::load_tokens().is_ok();
         let has_cursor_creds = matches!(auth_status.cursor, auth::AuthState::Available);
+        let has_windsurf_creds = auth::windsurf::is_available();
         let has_openrouter_creds = openrouter::OpenRouterProvider::has_credentials();
+        let has_opencode_go_creds = opencode_go::OpenCodeGoProvider::from_profile().is_ok();
 
         let use_claude_cli = std::env::var("JCODE_USE_CLAUDE_CLI")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
@@ -160,11 +162,35 @@ impl MultiProvider {
             None
         };
 
+        let windsurf_provider = if has_windsurf_creds {
+            match windsurf::WindsurfProvider::new("swe-1.6".to_string()) {
+                Ok(p) => Some(Arc::new(p)),
+                Err(e) => {
+                    crate::logging::info(&format!("Failed to initialize Windsurf: {}", e));
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         let openrouter = if has_openrouter_creds {
             match openrouter::OpenRouterProvider::new() {
                 Ok(p) => Some(Arc::new(p)),
                 Err(e) => {
                     crate::logging::info(&format!("Failed to initialize OpenRouter: {}", e));
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        let opencode_go = if has_opencode_go_creds {
+            match opencode_go::OpenCodeGoProvider::from_profile() {
+                Ok(p) => Some(Arc::new(p)),
+                Err(e) => {
+                    crate::logging::info(&format!("Failed to initialize OpenCode Go: {}", e));
                     None
                 }
             }
@@ -183,7 +209,9 @@ impl MultiProvider {
             antigravity: antigravity_provider.is_some(),
             gemini: gemini_provider.is_some(),
             cursor: cursor_provider.is_some(),
+            windsurf: windsurf_provider.is_some(),
             openrouter: openrouter.is_some(),
+            opencode_go: opencode_go.is_some(),
             copilot_premium_zero,
         };
         let mut active = Self::auto_default_provider(availability);
@@ -250,7 +278,7 @@ impl MultiProvider {
                 }
             } else {
                 crate::logging::warn(&format!(
-                    "Unknown default_provider '{}' in config (expected: claude|openai|copilot|antigravity|gemini|cursor|openrouter or an OpenAI-compatible profile such as deepseek|zai|openai-compatible)",
+                    "Unknown default_provider '{}' in config (expected: claude|openai|copilot|antigravity|gemini|cursor|windsurf|openrouter or an OpenAI-compatible profile such as deepseek|zai|openai-compatible)",
                     pref
                 ));
             }
@@ -265,6 +293,8 @@ impl MultiProvider {
             gemini: RwLock::new(gemini_provider),
             cursor: RwLock::new(cursor_provider),
             openrouter: RwLock::new(openrouter),
+            windsurf: RwLock::new(windsurf_provider),
+            opencode_go: RwLock::new(opencode_go),
             active: RwLock::new(active),
             use_claude_cli,
             startup_notices: RwLock::new(Vec::new()),
@@ -286,7 +316,7 @@ impl MultiProvider {
         result.spawn_openai_catalog_refresh_if_needed();
         result.auto_select_active_multi_account();
         crate::logging::info(&format!(
-            "[TIMING] provider_init: claude={}, anthropic={}, openai={}, copilot={}, antigravity={}, gemini={}, cursor={}, openrouter={}, total={}ms",
+            "[TIMING] provider_init: claude={}, anthropic={}, openai={}, copilot={}, antigravity={}, gemini={}, cursor={}, windsurf={}, openrouter={}, total={}ms",
             result
                 .claude
                 .read()
@@ -319,6 +349,11 @@ impl MultiProvider {
                 .is_some(),
             result
                 .cursor
+                .read()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .is_some(),
+            result
+                .windsurf
                 .read()
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .is_some(),
