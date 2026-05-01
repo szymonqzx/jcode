@@ -15,34 +15,31 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde_json::Value;
+use std::sync::{Arc, RwLock};
 use std::sync::{Arc, RwLock};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
 /// Helper function to recover from poisoned RwLock with logging
-#[allow(dead_code)]
 fn recover_rwlock_read<T, F>(lock: &RwLock<T>, fallback: F, context: &str) -> T
 where
-    T: Clone,
     F: FnOnce(&T) -> T,
 {
-    lock.read().map(|guard| guard.clone()).unwrap_or_else(|e| {
+    lock.read().unwrap_or_else(|e| {
         crate::logging::warn(&format!("Recovering from poisoned RwLock in opencode-go provider ({})", context));
         let guard = e.into_inner();
         fallback(&guard)
-    })
+    }).clone()
 }
 
 /// Helper function to recover from poisoned RwLock with logging (write)
-#[allow(dead_code)]
 fn recover_rwlock_write<T, F>(lock: &RwLock<T>, fallback: F, context: &str) -> T
 where
-    T: Clone,
     F: FnOnce(&T) -> T,
 {
-    lock.write().map(|guard| guard.clone()).unwrap_or_else(|e| {
+    lock.write().unwrap_or_else(|e| {
         crate::logging::warn(&format!("Recovering from poisoned RwLock in opencode-go provider ({})", context));
         let guard = e.into_inner();
         fallback(&guard)
@@ -51,9 +48,11 @@ where
 
 const DEFAULT_API_BASE: &str = "https://opencode.ai/zen/go/v1";
 const DEFAULT_MODEL: &str = "deepseek-v4-flash";
+const DEFAULT_MODEL: &str = "deepseek-v4-flash";
 
 pub struct OpenCodeGoProvider {
     client: Client,
+    model: Arc<RwLock<String>>,
     model: Arc<RwLock<String>>,
     api_base: String,
     api_key: String,
@@ -80,6 +79,7 @@ impl OpenCodeGoProvider {
         Ok(Self {
             client: crate::provider::shared_http_client(),
             model: Arc::new(RwLock::new(model)),
+            model: Arc::new(RwLock::new(model)),
             api_base: profile.api_base,
             api_key,
         })
@@ -90,7 +90,7 @@ impl OpenCodeGoProvider {
         Self {
             client: crate::provider::shared_http_client(),
             model: Arc::new(RwLock::new(model)),
-            api_base: crate::provider_catalog::normalize_api_base(&api_base).unwrap_or(DEFAULT_API_BASE.to_string()),
+            api_base: crate::provider_catalog::normalize_api_base(&api_base).unwrap_or_else(|_| DEFAULT_API_BASE.to_string()),
             api_key,
         }
     }
@@ -112,8 +112,9 @@ impl OpenCodeGoProvider {
         let openai_messages = build_openai_messages(messages, system)?;
         let openai_tools = build_tools(tools);
 
-        let model = recover_rwlock_read(&self.model, |guard| guard.clone(), "model read");
+        let model = recover_rwlock_read(&self.model, |guard| guard, "model read");
         let mut request_body = serde_json::json!({
+            "model": model,
             "model": model,
             "messages": openai_messages,
             "stream": true,
@@ -136,6 +137,13 @@ impl OpenCodeGoProvider {
         if !response.status().is_success() {
             let status = response.status();
             let body = crate::util::http_error_body(response, "HTTP error").await;
+            anyhow::bail!(
+                "OpenCode Go API error ({}): {} (api_base={}, model={})",
+                status,
+                body,
+                self.api_base,
+                self.model()
+            );
             anyhow::bail!(
                 "OpenCode Go API error ({}): {} (api_base={}, model={})",
                 status,
@@ -172,13 +180,14 @@ impl Provider for OpenCodeGoProvider {
         Arc::new(Self {
             client: self.client.clone(),
             model: Arc::clone(&self.model),
+            model: Arc::clone(&self.model),
             api_base: self.api_base.clone(),
             api_key: self.api_key.clone(),
         })
     }
 
     fn model(&self) -> String {
-        self.model.read().unwrap().clone()
+        recover_rwlock_read(&self.model, |guard| guard, "model read")
     }
 
     fn set_model(&self, model: &str) -> Result<()> {
@@ -186,11 +195,23 @@ impl Provider for OpenCodeGoProvider {
         if trimmed.is_empty() {
             anyhow::bail!("OpenCode Go model cannot be empty");
         }
-        *self.model.write().unwrap() = trimmed.to_string();
+        *recover_rwlock_write(&self.model, |guard| guard, "model write") = trimmed.to_string();
         Ok(())
     }
 
     fn available_models_display(&self) -> Vec<String> {
+        vec!["deepseek-v4-flash".to_string(), "THUDM/GLM-4.5".to_string()]
+    }
+
+    fn context_window(&self) -> usize {
+        // Context windows for OpenCode Go models (from official documentation)
+        // deepseek-v4-flash: 1,048,576 tokens (1M) from OpenRouter/DeepSeek docs
+        // THUDM/GLM-4.5: 131,072 tokens from Z.AI docs (GLM-4.5-Air)
+        match self.model().as_str() {
+            "deepseek-v4-flash" => 1_048_576,
+            "THUDM/GLM-4.5" => 131_072,
+            _ => 131_072, // Conservative default for unknown models
+        }
         vec!["deepseek-v4-flash".to_string(), "THUDM/GLM-4.5".to_string()]
     }
 
@@ -216,8 +237,10 @@ fn build_openai_messages(messages: &[Message], system: &str) -> Result<Vec<Value
     let mut openai_messages = Vec::new();
 
     // Add system message if present (OpenAI chat completions API supports system role)
+    // Add system message if present (OpenAI chat completions API supports system role)
     if !system.is_empty() {
         openai_messages.push(serde_json::json!({
+            "role": "system",
             "role": "system",
             "content": system
         }));
@@ -251,6 +274,32 @@ fn build_openai_messages(messages: &[Message], system: &str) -> Result<Vec<Value
             continue; // Skip if only ToolResult blocks were present
         }
 
+        // Handle ToolResult blocks as separate messages (OpenAI format)
+        for block in &msg.content {
+            if let ContentBlock::ToolResult { tool_use_id, content, is_error } = block {
+                let output = if is_error == &Some(true) {
+                    format!("[Error] {}", content)
+                } else {
+                    content.clone()
+                };
+                openai_messages.push(serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": tool_use_id,
+                    "content": output
+                }));
+            }
+        }
+
+        // Process non-ToolResult blocks as a single message
+        let non_tool_blocks: Vec<_> = msg.content
+            .iter()
+            .filter(|block| !matches!(block, ContentBlock::ToolResult { .. }))
+            .collect();
+
+        if non_tool_blocks.is_empty() {
+            continue; // Skip if only ToolResult blocks were present
+        }
+
         let role = match msg.role {
             Role::User => "user",
             Role::Assistant => "assistant",
@@ -258,7 +307,29 @@ fn build_openai_messages(messages: &[Message], system: &str) -> Result<Vec<Value
 
         let content: Value = if non_tool_blocks.len() == 1 {
             match &non_tool_blocks[0] {
+        let content: Value = if non_tool_blocks.len() == 1 {
+            match &non_tool_blocks[0] {
                 ContentBlock::Text { text, .. } => serde_json::json!(text),
+                ContentBlock::Reasoning { text } => serde_json::json!(text),
+                ContentBlock::ToolUse { id, name, input } => {
+                    let arguments = if input.is_object() {
+                        serde_json::to_string(input).unwrap_or_else(|_| "{}".to_string())
+                    } else {
+                        input.as_str().unwrap_or("{}").to_string()
+                    };
+                    serde_json::json!({
+                        "role": "assistant",
+                        "tool_calls": [{
+                            "id": id,
+                            "type": "function",
+                            "function": {
+                                "name": name,
+                                "arguments": arguments
+                            }
+                        }]
+                    })
+                },
+                _ => anyhow::bail!("Unsupported content block type in single-block message: {:?}", non_tool_blocks[0]),
                 ContentBlock::Reasoning { text } => serde_json::json!(text),
                 ContentBlock::ToolUse { id, name, input } => {
                     let arguments = if input.is_object() {
@@ -327,21 +398,20 @@ fn build_openai_messages(messages: &[Message], system: &str) -> Result<Vec<Value
                 }
             } else {
                 // Multiple non-tool blocks (text/reasoning)
-                let blocks: Vec<Value> = non_tool_blocks
+                serde_json::json!(non_tool_blocks
                     .iter()
                     .map(|block| match block {
-                        ContentBlock::Text { text, .. } => Ok(serde_json::json!({
+                        ContentBlock::Text { text, .. } => serde_json::json!({
                             "type": "text",
                             "text": text
-                        })),
-                        ContentBlock::Reasoning { text } => Ok(serde_json::json!({
+                        }),
+                        ContentBlock::Reasoning { text } => serde_json::json!({
                             "type": "text",
                             "text": text
-                        })),
+                        }),
                         _ => anyhow::bail!("Unsupported content block type in multi-block message: {:?}", block),
                     })
-                    .collect::<Result<Vec<_>>>()?;
-                serde_json::json!(blocks)
+                    .collect::<Vec<_>>())
             }
         };
 
@@ -374,6 +444,8 @@ async fn convert_openai_stream_to_anthropic(
         let mut buffer = String::new();
         const MAX_BUFFER_SIZE: usize = 1024 * 1024; // 1MB limit to prevent memory issues
         let mut message_end_sent = false;
+        const MAX_BUFFER_SIZE: usize = 1024 * 1024; // 1MB limit to prevent memory issues
+        let mut message_end_sent = false;
 
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
@@ -384,7 +456,11 @@ async fn convert_openai_stream_to_anthropic(
                     // Normalize line endings to \n for consistent processing
                     let normalized = buffer.replace("\r\n", "\n").replace('\r', "\n");
 
+                    // Normalize line endings to \n for consistent processing
+                    let normalized = buffer.replace("\r\n", "\n").replace('\r', "\n");
+
                     // Process SSE events
+                    for line in normalized.lines() {
                     for line in normalized.lines() {
                         if line.starts_with("data: ") {
                             let data = &line[6..];
@@ -395,13 +471,14 @@ async fn convert_openai_stream_to_anthropic(
                                     }
                                     message_end_sent = true;
                                 }
-                                break;
+                                return;
                             }
 
                             if let Ok(json) = serde_json::from_str::<Value>(data) {
                                 if let Some(choices) = json.get("choices").and_then(|v| v.as_array()) {
                                     if let Some(choice) = choices.first() {
                                         if let Some(delta) = choice.get("delta") {
+                                            // Handle content deltas
                                             // Handle content deltas
                                             if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
                                                 if !content.is_empty() {
@@ -417,22 +494,15 @@ async fn convert_openai_stream_to_anthropic(
                                                     if let Some(id) = tool_call.get("id").and_then(|v| v.as_str()) {
                                                         if let Some(function) = tool_call.get("function") {
                                                             if let Some(name) = function.get("name").and_then(|v| v.as_str()) {
-                                                                // Send tool use start event
-                                                                if tx.send(Ok(StreamEvent::ToolUseStart {
-                                                                    id: id.to_string(),
-                                                                    name: name.to_string(),
-                                                                })).await.is_err() {
-                                                                    return;
-                                                                }
                                                                 if let Some(arguments) = function.get("arguments").and_then(|v| v.as_str()) {
-                                                                    // Send tool input delta event
-                                                                    if tx.send(Ok(StreamEvent::ToolInputDelta(arguments.to_string()))).await.is_err() {
+                                                                    // Send tool use event
+                                                                    if tx.send(Ok(StreamEvent::ToolUse {
+                                                                        id: id.to_string(),
+                                                                        name: name.to_string(),
+                                                                        input: arguments.to_string(),
+                                                                    })).await.is_err() {
                                                                         return;
                                                                     }
-                                                                }
-                                                                // Send tool use end event
-                                                                if tx.send(Ok(StreamEvent::ToolUseEnd)).await.is_err() {
-                                                                    return;
                                                                 }
                                                             }
                                                         }
@@ -449,7 +519,7 @@ async fn convert_openai_stream_to_anthropic(
                                                     }
                                                     message_end_sent = true;
                                                 }
-                                                break;
+                                                return;
                                             }
                                         }
                                     }
@@ -460,8 +530,19 @@ async fn convert_openai_stream_to_anthropic(
 
                     // Keep only incomplete lines in buffer
                     // Find the last newline in the original buffer (before normalization)
+                    // Find the last newline in the original buffer (before normalization)
                     if let Some(last_newline) = buffer.rfind('\n') {
                         buffer = buffer[last_newline + 1..].to_string();
+                    } else {
+                        // No newline found - check buffer size to prevent unbounded growth
+                        // Only clear if buffer exceeds size limit, otherwise keep it for next chunk
+                        if buffer.len() > MAX_BUFFER_SIZE {
+                            crate::logging::warn(&format!(
+                                "Stream buffer exceeded {} bytes, clearing to prevent memory issues",
+                                MAX_BUFFER_SIZE
+                            ));
+                            buffer.clear();
+                        }
                     } else {
                         // No newline found - check buffer size to prevent unbounded growth
                         // Only clear if buffer exceeds size limit, otherwise keep it for next chunk
@@ -478,11 +559,20 @@ async fn convert_openai_stream_to_anthropic(
                     if tx.send(Err(anyhow::anyhow!("Stream error: {}", e))).await.is_err() {
                         return;
                     }
+                    if tx.send(Err(anyhow::anyhow!("Stream error: {}", e))).await.is_err() {
+                        return;
+                    }
                     return;
                 }
             }
         }
 
+        // Send final MessageEnd if not already sent
+        if !message_end_sent {
+            if tx.send(Ok(StreamEvent::MessageEnd { stop_reason: None })).await.is_err() {
+                return;
+            }
+        }
         // Send final MessageEnd if not already sent
         if !message_end_sent {
             if tx.send(Ok(StreamEvent::MessageEnd { stop_reason: None })).await.is_err() {
@@ -502,13 +592,16 @@ mod tests {
     fn test_normalize_api_base() {
         assert_eq!(
             crate::provider_catalog::normalize_api_base("https://opencode.ai/zen/go/v1").unwrap(),
+            crate::provider_catalog::normalize_api_base("https://opencode.ai/zen/go/v1").unwrap(),
             "https://opencode.ai/zen/go/v1"
         );
         assert_eq!(
             crate::provider_catalog::normalize_api_base("https://opencode.ai/zen/go/v1/").unwrap(),
+            crate::provider_catalog::normalize_api_base("https://opencode.ai/zen/go/v1/").unwrap(),
             "https://opencode.ai/zen/go/v1/"
         );
         assert_eq!(
+            crate::provider_catalog::normalize_api_base("https://opencode.ai/zen/go").unwrap(),
             crate::provider_catalog::normalize_api_base("https://opencode.ai/zen/go").unwrap(),
             "https://opencode.ai/zen/go/v1"
         );

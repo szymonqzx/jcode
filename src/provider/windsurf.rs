@@ -8,6 +8,7 @@
 
 use super::{EventStream, Provider};
 use super::protobuf::{encode_message, encode_string, encode_varint_field, parse_fields, FieldValue};
+use super::protobuf::{encode_message, encode_string, encode_varint_field, parse_fields, FieldValue};
 use crate::auth::windsurf as windsurf_auth;
 use crate::message::{Message, StreamEvent, ToolDefinition};
 use anyhow::{Context, Result};
@@ -18,27 +19,23 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 /// Helper function to recover from poisoned RwLock with logging
-#[allow(dead_code)]
 fn recover_rwlock_read<T, F>(lock: &RwLock<T>, fallback: F, context: &str) -> T
 where
-    T: Clone,
     F: FnOnce(&T) -> T,
 {
-    lock.read().map(|guard| guard.clone()).unwrap_or_else(|e| {
+    lock.read().unwrap_or_else(|e| {
         crate::logging::warn(&format!("Recovering from poisoned RwLock in windsurf provider ({})", context));
         let guard = e.into_inner();
         fallback(&guard)
-    })
+    }).clone()
 }
 
 /// Helper function to recover from poisoned RwLock with logging (write)
-#[allow(dead_code)]
 fn recover_rwlock_write<T, F>(lock: &RwLock<T>, fallback: F, context: &str) -> T
 where
-    T: Clone,
     F: FnOnce(&T) -> T,
 {
-    lock.write().map(|guard| guard.clone()).unwrap_or_else(|e| {
+    lock.write().unwrap_or_else(|e| {
         crate::logging::warn(&format!("Recovering from poisoned RwLock in windsurf provider ({})", context));
         let guard = e.into_inner();
         fallback(&guard)
@@ -47,6 +44,10 @@ where
 
 /// Available Windsurf models
 pub(crate) const AVAILABLE_MODELS: &[&str] = &[
+    "swe-1.5",
+    "swe-1.6",
+    "kimi-k2.5",
+    "kimi-k2.6",
     "swe-1.5",
     "swe-1.6",
     "kimi-k2.5",
@@ -69,7 +70,6 @@ const MODEL_ENUMS: &[(&str, i32)] = &[
 #[derive(Clone, Copy, PartialEq)]
 enum ChatMessageSource {
     User = 1,
-    #[allow(dead_code)]
     System = 2,
     Assistant = 3,
     Tool = 4,
@@ -256,10 +256,131 @@ fn build_chat_request(
 /// Resolve model name to enum value
 /// Returns an error if the model is not known, to avoid silently using the wrong model
 fn resolve_model_enum(model: &str) -> Result<i32> {
+/// Returns an error if the model is not known, to avoid silently using the wrong model
+fn resolve_model_enum(model: &str) -> Result<i32> {
     MODEL_ENUMS
         .iter()
         .find(|(name, _)| *name == model)
         .map(|(_, enum_val)| *enum_val)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Unknown Windsurf model '{}'. Known models: {}",
+                model,
+                MODEL_ENUMS.iter().map(|(name, _)| *name).collect::<Vec<_>>().join(", ")
+            )
+        })
+}
+
+/// Build a tool-calling prompt when tools are provided
+/// This enhances the system prompt with tool definitions and instructions
+fn build_tool_calling_prompt(system: &str, tools: &[ToolDefinition]) -> String {
+    let mut prompt = system.to_string();
+
+    if !prompt.is_empty() {
+        prompt.push_str("\n\n");
+    }
+
+    prompt.push_str("You have access to the following tools:\n\n");
+
+    for tool in tools {
+        prompt.push_str(&format!("Tool: {}\n", tool.name));
+        prompt.push_str(&format!("Description: {}\n", tool.description));
+        prompt.push_str(&format!("Input Schema: {}\n", serde_json::to_string(&tool.input_schema).unwrap_or_default()));
+        prompt.push_str("\n");
+    }
+
+    prompt.push_str("When you need to use a tool, respond with a tool call in the following format:\n");
+    prompt.push_str("```\n");
+    prompt.push_str("tool_calls: [{\"name\": \"tool_name\", \"arguments\": {\"param\": \"value\"}}]\n");
+    prompt.push_str("```\n");
+    prompt.push_str("Otherwise, provide your response directly as text.\n");
+
+    prompt
+}
+
+// ============================================================================
+// Response Parsing (Protobuf Decoding)
+// ============================================================================
+
+/// Extract text from RawChatMessage protobuf
+/// Field 1: message_id (string)
+/// Field 2: source (enum)
+/// Field 3: timestamp (message)
+/// Field 4: conversation_id (string)
+/// Field 5: text (string) ← What we want
+/// Field 6: in_progress (bool)
+/// Field 7: is_error (bool)
+fn extract_text_from_raw_chat_message(buffer: &[u8]) -> String {
+    if let Ok(fields) = parse_fields(buffer) {
+        for field in fields {
+            // Field 5 is the text content
+            if field.number == 5 {
+                if let FieldValue::Bytes(data) = field.value {
+                    if let Ok(text) = String::from_utf8(data) {
+                        return text;
+                    }
+                }
+            }
+        }
+    }
+    String::new()
+}
+
+/// Extract text from RawGetChatMessageResponse protobuf
+/// Field 1: delta_message (RawChatMessage)
+fn extract_text_from_response(buffer: &[u8]) -> String {
+    if let Ok(fields) = parse_fields(buffer) {
+        for field in fields {
+            // Field 1 is delta_message (RawChatMessage)
+            if field.number == 1 {
+                if let FieldValue::Bytes(data) = field.value {
+                    let text = extract_text_from_raw_chat_message(&data);
+                    if !text.is_empty() {
+                        return text;
+                    }
+                }
+            }
+        }
+    }
+    String::new()
+}
+
+/// Extract readable text from a gRPC response chunk
+/// The response is gRPC-framed: 1 byte compression + 4 bytes length + protobuf payload
+fn extract_text_from_chunk(chunk: &[u8]) -> String {
+    let mut results = Vec::new();
+    let mut offset = 0;
+
+    while offset + 5 <= chunk.len() {
+        let compressed = chunk[offset];
+        let message_length = u32::from_be_bytes([chunk[offset + 1], chunk[offset + 2], chunk[offset + 3], chunk[offset + 4]]) as usize;
+
+        if compressed != 0 {
+            // Compressed data not supported, skip
+            offset += 5 + message_length;
+            continue;
+        }
+
+        if offset + 5 + message_length > chunk.len() {
+            // Not enough data for the full message, try as raw protobuf
+            break;
+        }
+
+        let message_data = &chunk[offset + 5..offset + 5 + message_length];
+        let text = extract_text_from_response(message_data);
+        if !text.is_empty() {
+            results.push(text);
+        }
+        offset += 5 + message_length;
+    }
+
+    // If we extracted text from proper protobuf parsing, return it
+    if !results.is_empty() {
+        results.join("")
+    } else {
+        // Fallback: try parsing the entire chunk as protobuf
+        extract_text_from_response(chunk)
+    }
         .ok_or_else(|| {
             anyhow::anyhow!(
                 "Unknown Windsurf model '{}'. Known models: {}",
@@ -385,6 +506,7 @@ fn extract_text_from_chunk(chunk: &[u8]) -> String {
 pub struct WindsurfProvider {
     model: Arc<RwLock<String>>,
     credentials: Arc<RwLock<windsurf_auth::WindsurfCredentials>>,
+    credentials: Arc<RwLock<windsurf_auth::WindsurfCredentials>>,
 }
 
 impl WindsurfProvider {
@@ -396,24 +518,25 @@ impl WindsurfProvider {
         Ok(Self {
             model: Arc::new(RwLock::new(model)),
             credentials: Arc::new(RwLock::new(credentials)),
+            credentials: Arc::new(RwLock::new(credentials)),
         })
     }
 
     /// Get the current model
     pub fn model(&self) -> String {
-        self.model.read().unwrap().clone()
+        recover_rwlock_read(&self.model, |guard| guard, "model read")
     }
 
     /// Set the model
     pub fn set_model(&self, model: String) {
-        *self.model.write().unwrap() = model;
+        *recover_rwlock_write(&self.model, |guard| guard, "model write") = model;
     }
 
     /// Refresh credentials from disk
     pub fn refresh_credentials(&self) -> Result<()> {
         let new_creds = windsurf_auth::load_credentials()
             .context("Failed to refresh Windsurf credentials")?;
-        *self.credentials.write().unwrap() = new_creds;
+        *recover_rwlock_write(&self.credentials, |guard| guard, "credentials write") = new_creds;
         Ok(())
     }
 }
@@ -425,34 +548,28 @@ impl Provider for WindsurfProvider {
         messages: &[Message],
         tools: &[ToolDefinition],
         system: &str,
+        tools: &[ToolDefinition],
+        system: &str,
         _resume_session_id: Option<&str>,
     ) -> Result<EventStream> {
         let (tx, rx) = mpsc::channel(100);
 
         // Clone credentials and messages for the async task
-        let credentials = self.credentials.read().unwrap().clone();
+        let credentials = recover_rwlock_read(&self.credentials, |guard| guard, "credentials read");
         let model = self.model();
         let messages = messages.to_vec();
+        let system = system.to_string();
+        let tools = tools.to_vec();
         let system = system.to_string();
         let tools = tools.to_vec();
 
         tokio::spawn(async move {
             // Build gRPC request with protobuf encoding
-            let model_enum = match resolve_model_enum(&model) {
-                Ok(e) => e,
-                Err(e) => {
-                    let _ = tx.send(Err(e)).await;
-                    return;
-                }
-            };
+            let model_enum = resolve_model_enum(&model)
+                .map_err(|e| anyhow::anyhow!("Failed to resolve Windsurf model: {}", e))?;
             let model_name = &model;
-            let api_key = match credentials.api_key.as_deref() {
-                Some(k) => k,
-                None => {
-                    let _ = tx.send(Err(anyhow::anyhow!("Windsurf API key not found. Please login to Windsurf first."))).await;
-                    return;
-                }
-            };
+            let api_key = credentials.api_key.as_deref()
+                .ok_or_else(|| anyhow::anyhow!("Windsurf API key not found. Please login to Windsurf first."))?;
             let version = &credentials.version;
 
             // Build tool-calling prompt if tools are provided
@@ -486,6 +603,7 @@ impl Provider for WindsurfProvider {
                 Ok(c) => c,
                 Err(e) => {
                     let _ = tx.send(Err(anyhow::anyhow!("Failed to create HTTP/2 client: {} (model={})", e, model))).await;
+                    let _ = tx.send(Err(anyhow::anyhow!("Failed to create HTTP/2 client: {} (model={})", e, model))).await;
                     return;
                 }
             };
@@ -510,6 +628,7 @@ impl Provider for WindsurfProvider {
                 Ok(r) => r,
                 Err(e) => {
                     let _ = tx.send(Err(anyhow::anyhow!("Failed to connect to Windsurf: {} (port={}, model={})", e, credentials.port, model))).await;
+                    let _ = tx.send(Err(anyhow::anyhow!("Failed to connect to Windsurf: {} (port={}, model={})", e, credentials.port, model))).await;
                     return;
                 }
             };
@@ -521,15 +640,19 @@ impl Provider for WindsurfProvider {
                     Err(_) => "unknown".to_string(),
                 };
                 let _ = tx.send(Err(anyhow::anyhow!("Windsurf returned error {}: {} (port={}, model={})", status, body, credentials.port, model))).await;
+                let _ = tx.send(Err(anyhow::anyhow!("Windsurf returned error {}: {} (port={}, model={})", status, body, credentials.port, model))).await;
                 return;
             }
 
+            // Stream the response and parse protobuf
             // Stream the response and parse protobuf
             let mut stream = response.bytes_stream();
 
             while let Some(chunk_result) = stream.next().await {
                 match chunk_result {
                     Ok(chunk) => {
+                        // Parse gRPC response chunk using protobuf decoding
+                        let text = extract_text_from_chunk(&chunk);
                         // Parse gRPC response chunk using protobuf decoding
                         let text = extract_text_from_chunk(&chunk);
                         if !text.is_empty() {
@@ -554,8 +677,13 @@ impl Provider for WindsurfProvider {
         // This is acceptable because Windsurf credentials are loaded once at startup
         // and don't change during normal operation. If dynamic credential reloading
         // is needed, this should create a new provider instance instead.
+        // Note: This shares the same Arc<RwLock> for credentials and model with the parent.
+        // This is acceptable because Windsurf credentials are loaded once at startup
+        // and don't change during normal operation. If dynamic credential reloading
+        // is needed, this should create a new provider instance instead.
         Arc::new(Self {
             model: Arc::clone(&self.model),
+            credentials: Arc::clone(&self.credentials),
             credentials: Arc::clone(&self.credentials),
         })
     }
@@ -577,7 +705,7 @@ impl Provider for WindsurfProvider {
     }
 
     fn set_model(&self, model: &str) -> anyhow::Result<()> {
-        *self.model.write().unwrap() = model.to_string();
+        *recover_rwlock_write(&self.model, |guard| guard, "model write") = model.to_string();
         Ok(())
     }
 
@@ -632,6 +760,10 @@ mod tests {
         assert!(AVAILABLE_MODELS.contains(&"swe-1.6"));
         assert!(AVAILABLE_MODELS.contains(&"kimi-k2.5"));
         assert!(AVAILABLE_MODELS.contains(&"kimi-k2.6"));
+        assert!(AVAILABLE_MODELS.contains(&"swe-1.5"));
+        assert!(AVAILABLE_MODELS.contains(&"swe-1.6"));
+        assert!(AVAILABLE_MODELS.contains(&"kimi-k2.5"));
+        assert!(AVAILABLE_MODELS.contains(&"kimi-k2.6"));
     }
 
     #[test]
@@ -644,12 +776,31 @@ mod tests {
         assert!(is_known_model("kimi-k2-thinking"));
         assert!(is_known_model("kimi-k2.5"));
         assert!(is_known_model("kimi-k2.6"));
+        assert!(is_known_model("swe-1.5"));
+        assert!(is_known_model("swe-1.5-thinking"));
+        assert!(is_known_model("swe-1.5-slow"));
+        assert!(is_known_model("swe-1.6"));
+        assert!(is_known_model("kimi-k2"));
+        assert!(is_known_model("kimi-k2-thinking"));
+        assert!(is_known_model("kimi-k2.5"));
+        assert!(is_known_model("kimi-k2.6"));
         assert!(!is_known_model("unknown-model"));
+        assert!(is_known_model("  swe-1.5  ")); // trimmed
         assert!(is_known_model("  swe-1.5  ")); // trimmed
     }
 
     #[test]
     fn test_provider_creation() {
+        // This test requires Windsurf to be running with valid credentials.
+        // Skip if not available to avoid CI failures.
+        let result = WindsurfProvider::new("swe-1.5".to_string());
+        if result.is_err() {
+            // Windsurf not running or not configured - skip test gracefully
+            return;
+        }
+        let provider = result.unwrap();
+        assert!(!provider.model().is_empty());
+        assert!(!provider.available_models().is_empty());
         // This test requires Windsurf to be running with valid credentials.
         // Skip if not available to avoid CI failures.
         let result = WindsurfProvider::new("swe-1.5".to_string());

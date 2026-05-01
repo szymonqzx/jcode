@@ -16,7 +16,10 @@ mod multi_provider;
 pub mod openai;
 pub(crate) mod openai_request;
 pub mod opencode_go;
+pub mod opencode_go;
 pub mod openrouter;
+pub mod protobuf;
+pub mod windsurf;
 pub mod protobuf;
 pub mod windsurf;
 pub mod pricing;
@@ -590,6 +593,10 @@ pub struct MultiProvider {
     windsurf: RwLock<Option<Arc<windsurf::WindsurfProvider>>>,
     /// OpenCode Go provider (OpenAI-compatible API)
     opencode_go: RwLock<Option<Arc<opencode_go::OpenCodeGoProvider>>>,
+    /// Windsurf provider (local gRPC, auto-discovered from running Windsurf)
+    windsurf: RwLock<Option<Arc<windsurf::WindsurfProvider>>>,
+    /// OpenCode Go provider (OpenAI-compatible API)
+    opencode_go: RwLock<Option<Arc<opencode_go::OpenCodeGoProvider>>>,
     active: RwLock<ActiveProvider>,
     /// Use Claude CLI instead of direct API (legacy mode)
     use_claude_cli: bool,
@@ -790,7 +797,9 @@ impl MultiProvider {
             "gemini" => Some(ActiveProvider::Gemini),
             "cursor" => Some(ActiveProvider::Cursor),
             "windsurf" => Some(ActiveProvider::Windsurf),
+            "windsurf" => Some(ActiveProvider::Windsurf),
             "openrouter" => Some(ActiveProvider::OpenRouter),
+            "opencode-go" => Some(ActiveProvider::OpenCodeGo),
             "opencode-go" => Some(ActiveProvider::OpenCodeGo),
             _ => None,
         }
@@ -803,6 +812,10 @@ impl MultiProvider {
             Some((ActiveProvider::Antigravity, "antigravity:", rest))
         } else if let Some(rest) = model.strip_prefix("cursor:") {
             Some((ActiveProvider::Cursor, "cursor:", rest))
+        } else if let Some(rest) = model.strip_prefix("windsurf:") {
+            Some((ActiveProvider::Windsurf, "windsurf:", rest))
+        } else if let Some(rest) = model.strip_prefix("opencode-go:") {
+            Some((ActiveProvider::OpenCodeGo, "opencode-go:", rest))
         } else if let Some(rest) = model.strip_prefix("windsurf:") {
             Some((ActiveProvider::Windsurf, "windsurf:", rest))
         } else if let Some(rest) = model.strip_prefix("opencode-go:") {
@@ -924,6 +937,16 @@ impl MultiProvider {
                 self.set_active_provider(ActiveProvider::Windsurf);
                 Ok(())
             }
+            ActiveProvider::Windsurf => {
+                let Some(windsurf) = self.windsurf_provider() else {
+                    anyhow::bail!(
+                        "Windsurf is not running. Make sure Windsurf is started first."
+                    );
+                };
+                windsurf.set_model(model.to_string());
+                self.set_active_provider(ActiveProvider::Windsurf);
+                Ok(())
+            }
             ActiveProvider::OpenRouter => {
                 let Some(openrouter) = self.openrouter_provider() else {
                     anyhow::bail!(
@@ -932,6 +955,16 @@ impl MultiProvider {
                 };
                 openrouter.set_model(model)?;
                 self.set_active_provider(ActiveProvider::OpenRouter);
+                Ok(())
+            }
+            ActiveProvider::OpenCodeGo => {
+                let Some(opencode_go) = self.opencode_go_provider() else {
+                    anyhow::bail!(
+                        "OpenCode Go credentials not available. Set OPENCODE_GO_API_KEY or run `jcode login --provider opencode-go` first."
+                    );
+                };
+                opencode_go.set_model(model)?;
+                self.set_active_provider(ActiveProvider::OpenCodeGo);
                 Ok(())
             }
             ActiveProvider::OpenCodeGo => {
@@ -1002,7 +1035,9 @@ impl Provider for MultiProvider {
             ActiveProvider::Gemini => "Gemini",
             ActiveProvider::Cursor => "Cursor",
             ActiveProvider::Windsurf => "Windsurf",
+            ActiveProvider::Windsurf => "Windsurf",
             ActiveProvider::OpenRouter => "OpenRouter",
+            ActiveProvider::OpenCodeGo => "opencode-go",
             ActiveProvider::OpenCodeGo => "opencode-go",
         }
     }
@@ -1043,10 +1078,18 @@ impl Provider for MultiProvider {
                 .windsurf_provider()
                 .map(|o| o.model())
                 .unwrap_or_else(|| "swe-1.6".to_string()),
+            ActiveProvider::Windsurf => self
+                .windsurf_provider()
+                .map(|o| o.model())
+                .unwrap_or_else(|| "swe-1.6".to_string()),
             ActiveProvider::OpenRouter => self
                 .openrouter_provider()
                 .map(|o| o.model())
                 .unwrap_or_else(|| "anthropic/claude-sonnet-4".to_string()),
+            ActiveProvider::OpenCodeGo => self
+                .opencode_go_provider()
+                .map(|o| o.model())
+                .unwrap_or_else(|| "deepseek-v4-flash".to_string()),
             ActiveProvider::OpenCodeGo => self
                 .opencode_go_provider()
                 .map(|o| o.model())
@@ -1149,6 +1192,10 @@ impl Provider for MultiProvider {
             ActiveProvider::Cursor => self
                 .cursor_provider()
                 .map(|cursor| cursor.available_models_for_switching())
+                .unwrap_or_default(),
+            ActiveProvider::Windsurf => self
+                .windsurf_provider()
+                .map(|windsurf| windsurf.available_models_for_switching())
                 .unwrap_or_default(),
             ActiveProvider::Windsurf => self
                 .windsurf_provider()
@@ -1337,6 +1384,22 @@ impl Provider for MultiProvider {
                         model,
                         provider: "Cursor".to_string(),
                         api_method: "cursor".to_string(),
+                        available: true,
+                        detail: String::new(),
+                        cheapness: None,
+                    });
+                }
+            }
+        }
+
+        // Windsurf models
+        {
+            if let Some(windsurf) = self.windsurf_provider() {
+                for model in windsurf.available_models_display() {
+                    routes.push(ModelRoute {
+                        model,
+                        provider: "Windsurf".to_string(),
+                        api_method: "windsurf".to_string(),
                         available: true,
                         detail: String::new(),
                         cheapness: None,
@@ -1673,6 +1736,18 @@ impl Provider for MultiProvider {
                 .unwrap_or_else(|poisoned| poisoned.into_inner()) =
                 Some(Arc::new(windsurf::WindsurfProvider::new("swe-1.6".to_string()).unwrap()));
         }
+
+        let already_has_windsurf = self.windsurf_provider().is_some();
+        if !already_has_windsurf
+            && windsurf::WindsurfProvider::new("swe-1.6".to_string()).is_ok()
+        {
+            crate::logging::info("Hot-initialized Windsurf provider after login");
+            *self
+                .windsurf
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+                Some(Arc::new(windsurf::WindsurfProvider::new("swe-1.6".to_string()).unwrap()));
+        }
         if let Some(anthropic) = self.anthropic_provider() {
             Self::spawn_post_auth_model_refresh(anthropic, "Anthropic");
         }
@@ -1690,6 +1765,9 @@ impl Provider for MultiProvider {
         }
         if let Some(cursor) = self.cursor_provider() {
             Self::spawn_post_auth_model_refresh(cursor, "Cursor");
+        }
+        if let Some(windsurf) = self.windsurf_provider() {
+            Self::spawn_post_auth_model_refresh(windsurf, "Windsurf");
         }
         if let Some(windsurf) = self.windsurf_provider() {
             Self::spawn_post_auth_model_refresh(windsurf, "Windsurf");
@@ -1735,6 +1813,7 @@ impl Provider for MultiProvider {
                 .map(|o| o.handles_tools_internally())
                 .unwrap_or(false),
             ActiveProvider::Windsurf => false,
+            ActiveProvider::Windsurf => false,
             ActiveProvider::OpenRouter => false, // jcode executes tools
             ActiveProvider::OpenCodeGo => false, // jcode executes tools
         }
@@ -1748,6 +1827,7 @@ impl Provider for MultiProvider {
             ActiveProvider::Antigravity => None,
             ActiveProvider::Gemini => None,
             ActiveProvider::Cursor => None,
+            ActiveProvider::Windsurf => None,
             ActiveProvider::Windsurf => None,
             ActiveProvider::OpenRouter => None,
             ActiveProvider::OpenCodeGo => None,
@@ -1777,7 +1857,6 @@ impl Provider for MultiProvider {
             ActiveProvider::Gemini => vec![],
             ActiveProvider::Cursor => vec![],
             ActiveProvider::Windsurf => vec![],
-            ActiveProvider::OpenCodeGo => vec![],
             _ => vec![],
         }
     }
@@ -1857,7 +1936,6 @@ impl Provider for MultiProvider {
             ActiveProvider::Gemini => vec![],
             ActiveProvider::Cursor => vec![],
             ActiveProvider::Windsurf => vec![],
-            ActiveProvider::OpenCodeGo => vec![],
             _ => vec![],
         }
     }
@@ -1893,6 +1971,7 @@ impl Provider for MultiProvider {
                 .cursor_provider()
                 .map(|o| o.supports_compaction())
                 .unwrap_or(false),
+            ActiveProvider::Windsurf => false,
             ActiveProvider::Windsurf => false,
             ActiveProvider::OpenRouter => self
                 .openrouter_provider()
@@ -1933,6 +2012,7 @@ impl Provider for MultiProvider {
                 .cursor_provider()
                 .map(|o| o.uses_jcode_compaction())
                 .unwrap_or(false),
+            ActiveProvider::Windsurf => false,
             ActiveProvider::Windsurf => false,
             ActiveProvider::OpenRouter => self
                 .openrouter_provider()
@@ -2031,6 +2111,9 @@ impl Provider for MultiProvider {
             ActiveProvider::Windsurf => {
                 Err(anyhow::anyhow!("Windsurf does not support native compaction"))
             }
+            ActiveProvider::Windsurf => {
+                Err(anyhow::anyhow!("Windsurf does not support native compaction"))
+            }
             ActiveProvider::OpenRouter => {
                 let provider = self.openrouter_provider();
                 if let Some(openrouter) = provider {
@@ -2106,6 +2189,7 @@ impl Provider for MultiProvider {
                 .map(|o| o.context_window())
                 .unwrap_or(DEFAULT_CONTEXT_LIMIT),
             ActiveProvider::Windsurf => 200_000,
+            ActiveProvider::Windsurf => 200_000,
             ActiveProvider::OpenRouter => self
                 .openrouter_provider()
                 .map(|o| o.context_window())
@@ -2173,6 +2257,17 @@ impl Provider for MultiProvider {
             None
         };
 
+        let windsurf = if self
+            .windsurf
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .is_some()
+        {
+            windsurf::WindsurfProvider::new("swe-1.6".to_string()).ok().map(Arc::new)
+        } else {
+            None
+        };
+
         let openrouter = if self
             .openrouter
             .read()
@@ -2193,6 +2288,7 @@ impl Provider for MultiProvider {
             gemini: RwLock::new(gemini_provider),
             cursor: RwLock::new(cursor_provider),
             windsurf: RwLock::new(windsurf),
+            windsurf: RwLock::new(windsurf),
             openrouter: RwLock::new(openrouter),
             opencode_go: RwLock::new(None),
             active: RwLock::new(active),
@@ -2209,6 +2305,8 @@ impl Provider for MultiProvider {
             let _ = provider.set_model(&format!("antigravity:{}", current_model));
         } else if matches!(active, ActiveProvider::Cursor) {
             let _ = provider.set_model(&format!("cursor:{}", current_model));
+        } else if matches!(active, ActiveProvider::Windsurf) {
+            let _ = provider.set_model(&current_model);
         } else if matches!(active, ActiveProvider::Windsurf) {
             let _ = provider.set_model(&current_model);
         } else {
@@ -2233,6 +2331,7 @@ impl Provider for MultiProvider {
             ActiveProvider::Antigravity => None,
             ActiveProvider::Gemini => None,
             ActiveProvider::Cursor => None,
+            ActiveProvider::Windsurf => None,
             ActiveProvider::Windsurf => None,
             ActiveProvider::OpenRouter => None,
             ActiveProvider::OpenCodeGo => None,
