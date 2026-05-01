@@ -2,7 +2,7 @@
 .SYNOPSIS
     Install jcode on Windows.
 .DESCRIPTION
-    Downloads the latest jcode release and installs it to %LOCALAPPDATA%\jcode\bin.
+    Downloads the latest jcode release and installs it to ~\.jcode\bin.
 
     One-liner install:
       irm https://raw.githubusercontent.com/szymonqzx/jcode/master/scripts/install.ps1 | iex
@@ -10,7 +10,7 @@
     Or download and run (allows parameters):
       & ([scriptblock]::Create((irm https://raw.githubusercontent.com/szymonqzx/jcode/master/scripts/install.ps1)))
 .PARAMETER InstallDir
-    Override the installation directory (default: $env:LOCALAPPDATA\jcode\bin)
+    Override the installation directory (default: $env:USERPROFILE\.jcode\bin)
 .PARAMETER Version
     Override the version tag to install. Required when using a local artifact path.
 .PARAMETER ArtifactExePath
@@ -40,16 +40,16 @@ if ($PSVersionTable.PSVersion.Major -lt 5) {
 
 $Repo = "szymonqzx/jcode"
 
-if (-not $InstallDir) {
-    $InstallDir = Join-Path $env:LOCALAPPDATA "jcode\bin"
-}
-
 $JcodeHome = if ($env:JCODE_HOME) {
     $env:JCODE_HOME
 } elseif ($env:USERPROFILE) {
     Join-Path $env:USERPROFILE ".jcode"
 } else {
     Join-Path ([Environment]::GetFolderPath("UserProfile")) ".jcode"
+}
+
+if (-not $InstallDir) {
+    $InstallDir = Join-Path $JcodeHome "bin"
 }
 
 $HotkeyDir = Join-Path $JcodeHome "hotkey"
@@ -404,7 +404,7 @@ $VersionNum = $Version.TrimStart('v')
 $TgzUrl = "https://github.com/$Repo/releases/download/$Version/$Artifact.tar.gz"
 $ExeUrl = "https://github.com/$Repo/releases/download/$Version/$Artifact.exe"
 
-$BuildsDir = Join-Path $env:LOCALAPPDATA "jcode\builds"
+$BuildsDir = Join-Path $JcodeHome "builds"
 $StableDir = Join-Path $BuildsDir "stable"
 $VersionDir = Join-Path $BuildsDir "versions\$VersionNum"
 $LauncherPath = Join-Path $InstallDir "jcode.exe"

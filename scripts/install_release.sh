@@ -9,7 +9,8 @@
 # - ~/.local/bin/jcode -> ~/.jcode/builds/current/jcode (launcher)
 set -euo pipefail
 
-repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+# Use script directory as base (more reliable in WSL2)
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 
 profile="${JCODE_RELEASE_PROFILE:-release-lto}"
 if [[ "${1:-}" == "--fast" ]]; then
@@ -34,6 +35,19 @@ case "$profile" in
     exit 1
     ;;
 esac
+
+# Enable sccache if available for compilation caching
+if command -v sccache >/dev/null 2>&1; then
+  export RUSTC_WRAPPER=sccache
+  echo "sccache enabled for compilation caching"
+else
+  echo "sccache not found, using standard cargo caching"
+fi
+
+# Linux-specific optimizations
+if [[ "$(uname -s)" = "Linux" ]]; then
+  echo "Applying Linux-specific optimizations (native CPU, lld linker)"
+fi
 
 cargo build --profile "$profile" --manifest-path "$repo_root/Cargo.toml"
 bin="$repo_root/target/$profile/jcode"
