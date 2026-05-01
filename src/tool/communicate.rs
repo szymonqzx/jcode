@@ -10,7 +10,6 @@ use anyhow::Result;
 use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::collections::HashMap;
 
 const REQUEST_ID: u64 = 1;
 
@@ -79,57 +78,11 @@ fn auto_assignment_needs_spawn(response: &ServerEvent) -> bool {
     })
 }
 
-fn default_run_await_statuses() -> Vec<String> {
-    vec![
-        "ready".to_string(),
-        "completed".to_string(),
-        "failed".to_string(),
-        "stopped".to_string(),
-    ]
-}
-
-async fn fetch_swarm_members(session_id: &str) -> Result<Vec<AgentInfo>> {
-    let request = Request::CommList {
-        id: REQUEST_ID,
-        session_id: session_id.to_string(),
-    };
-    match send_request(request).await {
-        Ok(ServerEvent::CommMembers { members, .. }) => Ok(members),
-        Ok(response) => {
-            ensure_success(&response)?;
-            Ok(Vec::new())
-        }
-        Err(e) => Err(anyhow::anyhow!("Failed to list swarm members: {}", e)),
-    }
-}
-
-async fn await_swarm_progress(
-    ctx: &ToolContext,
-    session_ids: Vec<String>,
-    timeout_minutes: u64,
-) -> Result<()> {
-    let request = Request::CommAwaitMembers {
-        id: REQUEST_ID,
-        session_id: ctx.session_id.clone(),
-        target_status: default_run_await_statuses(),
-        session_ids,
-        mode: Some("any".to_string()),
-        timeout_secs: Some(timeout_minutes.max(1) * 60),
-    };
-    let socket_timeout = std::time::Duration::from_secs(timeout_minutes.max(1) * 60 + 30);
-    match send_request_with_timeout(request, Some(socket_timeout)).await {
-        Ok(response) => ensure_success(&response),
-        Err(e) => Err(anyhow::anyhow!(
-            "Failed while awaiting swarm progress: {}",
-            e
-        )),
-    }
-}
-
 async fn spawn_assignment_session(ctx: &ToolContext, params: &CommunicateInput) -> Result<String> {
     let spawn_request = Request::CommSpawn {
         id: REQUEST_ID,
         session_id: ctx.session_id.clone(),
+        working_dir: params.working_dir.clone(),
         initial_message: None,
         request_nonce: Some(fresh_spawn_request_nonce(ctx)),
     };
@@ -263,13 +216,6 @@ fn format_members(ctx: &ToolContext, members: &[AgentInfo]) -> ToolOutput {
             let mut extra_meta = Vec::new();
             if member.is_headless == Some(true) {
                 extra_meta.push("headless".to_string());
-            }
-            if let Some(owner) = member.report_back_to_session_id.as_deref() {
-                if owner == ctx.session_id {
-                    extra_meta.push("owned_by_you".to_string());
-                } else {
-                    extra_meta.push(format!("owned_by={owner}"));
-                }
             }
             if let Some(attachments) = member.live_attachments {
                 extra_meta.push(format!("attachments={attachments}"));
@@ -464,43 +410,33 @@ fn format_context_history(target: &str, messages: &[HistoryMessage]) -> ToolOutp
     }
 }
 
-#[cfg(test)]
 fn format_awaited_members(
     completed: bool,
     summary: &str,
     members: &[AwaitedMemberStatus],
 ) -> ToolOutput {
-    format_awaited_members_with_reports(completed, summary, members, &HashMap::new())
-}
+    let mut output = if completed {
+        format!("All members done. {}\n", summary)
+    } else {
+        format!("Await incomplete. {}\n", summary)
+    };
 
-fn truncate_completion_report(report: &str) -> String {
-    const MAX_REPORT_CHARS: usize = 4000;
-    let report = report.trim();
-    if report.chars().count() <= MAX_REPORT_CHARS {
-        return report.to_string();
-    }
-    let suffix = "\n\n[Report truncated by jcode.]";
-    let keep = MAX_REPORT_CHARS.saturating_sub(suffix.chars().count());
-    let mut out: String = report.chars().take(keep).collect();
-    out.push_str(suffix);
-    out
-}
-
-fn latest_assistant_report(messages: &[HistoryMessage]) -> Option<String> {
-    messages.iter().rev().find_map(|message| {
-        if message.role != "assistant" {
-            return None;
+    if !members.is_empty() {
+        let duplicate_names =
+            duplicate_friendly_names(members.iter().map(|member| member.friendly_name.as_deref()));
+        output.push_str("\nMember statuses:\n");
+        for member in members {
+            let name = display_friendly_name(
+                member.friendly_name.as_deref(),
+                &member.session_id,
+                &duplicate_names,
+            );
+            let icon = if member.done { "✓" } else { "✗" };
+            output.push_str(&format!("  {} {} ({})\n", icon, name, member.status));
         }
-        let report = message.content.trim();
-        (!report.is_empty()).then(|| truncate_completion_report(report))
-    })
-}
-
-fn resolve_optional_target_session(target: Option<String>, current_session: &str) -> String {
-    match target.as_deref() {
-        Some("current") | None => current_session.to_string(),
-        Some(_) => target.expect("target is Some when as_deref returned Some"),
     }
+
+    ToolOutput::new(output)
 }
 
 fn default_await_target_statuses() -> Vec<String> {
@@ -559,6 +495,8 @@ struct CommunicateInput {
     #[serde(default)]
     role: Option<String>,
     #[serde(default)]
+    working_dir: Option<String>,
+    #[serde(default)]
     initial_message: Option<String>,
     #[serde(default)]
     prompt: Option<String>,
@@ -586,16 +524,6 @@ struct CommunicateInput {
     delivery: Option<CommDeliveryMode>,
     #[serde(default)]
     concurrency_limit: Option<usize>,
-    #[serde(default)]
-    force: Option<bool>,
-    #[serde(default)]
-    retain_agents: Option<bool>,
-    #[serde(default)]
-    status: Option<String>,
-    #[serde(default)]
-    validation: Option<String>,
-    #[serde(default)]
-    follow_up: Option<String>,
 }
 
 impl CommunicateInput {
@@ -611,7 +539,7 @@ impl Tool for CommunicateTool {
     }
 
     fn description(&self) -> &str {
-        "Coordinate agents. For spawn, prefer providing a prompt so the new agent starts with a concrete task instead of idling. Spawned/assigned agents automatically report their final response back to the owning coordinator."
+        "Coordinate agents. For spawn, prefer providing a prompt so the new agent starts with a concrete task instead of idling."
     }
 
     fn parameters_schema(&self) -> Value {
@@ -636,8 +564,7 @@ impl Tool for CommunicateTool {
                     "type": "string"
                 },
                 "message": {
-                    "type": "string",
-                    "description": "Message body."
+                    "type": "string"
                 },
                 "to_session": {
                     "type": "string",
@@ -651,13 +578,13 @@ impl Tool for CommunicateTool {
                     "type": "string",
                     "enum": ["agent", "coordinator", "worktree_manager"]
                 },
+                "working_dir": {
+                    "type": "string",
+                    "description": "Optional working directory for spawn."
+                },
                 "prompt": {
                     "type": "string",
                     "description": "Preferred for spawn. Initial task/instructions for the new agent. Spawning without prompt usually creates an idle agent that needs follow-up assignment."
-                },
-                "initial_message": {
-                    "type": "string",
-                    "description": "Explicit initial task/instructions for spawn. If both initial_message and prompt are supplied, initial_message wins."
                 },
                 "limit": {
                     "type": "integer",
@@ -666,7 +593,7 @@ impl Tool for CommunicateTool {
                 },
                 "task_id": {
                     "type": "string",
-                    "description": "Optional plan task ID. If omitted for assign_task/assign_next, the coordinator picks a runnable task. If omitted for resume/wake/retry/start with target_session, the server resumes the unique assigned task for that session."
+                    "description": "Optional plan task ID. If omitted for assign_task, the coordinator assigns the next runnable unassigned task."
                 },
                 "spawn_if_needed": {
                     "type": "boolean",
@@ -699,14 +626,6 @@ impl Tool for CommunicateTool {
                     "type": "integer",
                     "minimum": 1,
                     "description": "For fill_slots: desired maximum number of active swarm tasks."
-                },
-                "force": {
-                    "type": "boolean",
-                    "description": "For stop/cleanup: allow stopping non-owned/user-created swarm sessions. Defaults to false."
-                },
-                "retain_agents": {
-                    "type": "boolean",
-                    "description": "For run_plan: keep spawned workers after the plan reaches a terminal state. Defaults to false, so owned workers are cleaned up."
                 },
                 "wake": {
                     "type": "boolean",
@@ -1021,6 +940,7 @@ impl Tool for CommunicateTool {
                 let request = Request::CommSpawn {
                     id: REQUEST_ID,
                     session_id: ctx.session_id.clone(),
+                    working_dir: params.working_dir.clone(),
                     initial_message: params.spawn_initial_message(),
                     request_nonce: None,
                 };
@@ -1053,7 +973,6 @@ impl Tool for CommunicateTool {
                     id: REQUEST_ID,
                     session_id: ctx.session_id.clone(),
                     target_session: target.clone(),
-                    force: params.force,
                 };
 
                 match send_request(request).await {

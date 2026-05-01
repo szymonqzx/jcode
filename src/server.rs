@@ -55,7 +55,7 @@ use self::swarm::{
     broadcast_swarm_plan_with_previous, broadcast_swarm_status,
     format_structured_completion_report, record_swarm_event, record_swarm_event_for_session,
     refresh_swarm_task_staleness, remove_plan_participant, remove_session_file_touches,
-    remove_session_from_swarm, rename_plan_participant, run_swarm_message, summarize_plan_items,
+    remove_session_from_swarm, rename_plan_participant, summarize_plan_items,
     truncate_detail, update_member_status, update_member_status_with_report,
 };
 use self::swarm_channels::{

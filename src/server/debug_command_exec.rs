@@ -129,16 +129,6 @@ pub(super) async fn execute_debug_command(
         return Ok(output);
     }
 
-    if trimmed.starts_with("swarm_message:") {
-        let msg = trimmed.strip_prefix("swarm_message:").unwrap_or("").trim();
-        if msg.is_empty() {
-            return Err(anyhow::anyhow!("swarm_message: requires content"));
-        }
-
-        let final_text = super::run_swarm_message(agent.clone(), msg).await?;
-        return Ok(final_text);
-    }
-
     if trimmed.starts_with("message:") {
         let msg = trimmed.strip_prefix("message:").unwrap_or("").trim();
         if let Some(timeout_secs) = debug_message_timeout_secs() {
@@ -502,7 +492,7 @@ pub(super) async fn execute_debug_command(
 
     if trimmed == "help" {
         return Ok(
-            "debug commands: state, usage, history, tools, tools:full, mcp:servers, mcp:tools, mcp:connect:<server> <json>, mcp:disconnect:<server>, mcp:reload, mcp:call:<server>:<tool> <json>, last_response, message:<text>, message_async:<text>, swarm_message:<text>, swarm_message_async:<text>, tool:<name> <json>, queue_interrupt:<content>, queue_interrupt_urgent:<content>, agent:info, agent:memory, allocator, allocator:profile:on, allocator:profile:off, allocator:profile:prefix:<prefix>, allocator:profile:dump [path], jobs, job_status:<id>, job_wait:<id>, sessions, create_session, create_session:<path>, create_session:selfdev:<path>, set_model:<model>, set_provider:<name>, trigger_extraction, available_models, reload, help".to_string()
+            "debug commands: state, usage, history, tools, tools:full, mcp:servers, mcp:tools, mcp:connect:<server> <json>, mcp:disconnect:<server>, mcp:reload, mcp:call:<server>:<tool> <json>, last_response, message:<text>, message_async:<text>, tool:<name> <json>, queue_interrupt:<content>, queue_interrupt_urgent:<content>, agent:info, agent:memory, allocator, allocator:profile:on, allocator:profile:off, allocator:profile:prefix:<prefix>, allocator:profile:dump [path], jobs, job_status:<id>, job_wait:<id>, sessions, create_session, create_session:<path>, create_session:selfdev:<path>, set_model:<model>, set_provider:<name>, trigger_extraction, available_models, reload, help".to_string()
         );
     }
 

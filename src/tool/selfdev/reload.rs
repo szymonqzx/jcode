@@ -1,5 +1,11 @@
 use super::*;
-pub use jcode_selfdev_types::ReloadRecoveryDirective;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReloadRecoveryDirective {
+    pub reconnect_notice: Option<String>,
+    pub continuation_message: String,
+}
 
 impl ReloadContext {
     fn sanitize_session_id(session_id: &str) -> String {
