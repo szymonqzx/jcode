@@ -624,6 +624,7 @@ fn provider_style(provider_id: &str) -> Style {
         "gemini" | "google" => Color::Rgb(129, 184, 255),
         "copilot" => Color::Rgb(182, 154, 255),
         "cursor" => Color::Rgb(131, 215, 255),
+        "windsurf" => Color::Rgb(100, 180, 200),
         "openrouter"
         | "openai-compatible"
         | "opencode"

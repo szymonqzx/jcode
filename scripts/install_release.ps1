@@ -37,7 +37,8 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = & git rev-parse --show-toplevel 2>$null
 if ($LASTEXITCODE -ne 0 -or -not $repoRoot) {
-    $repoRoot = (Get-Location).Path
+    # Fall back to script directory parent (scripts/ is in repo root)
+    $repoRoot = Split-Path -Parent $PSScriptRoot
 }
 
 $profile = if ($env:JCODE_RELEASE_PROFILE) { $env:JCODE_RELEASE_PROFILE } else { 'release-lto' }
@@ -50,6 +51,17 @@ switch ($profile) {
         Write-Error "Unsupported profile: $profile (expected: release or release-lto)"
         exit 1
     }
+}
+
+# Enable sccache if available for compilation caching
+$sccacheAvailable = $false
+try {
+    $null = Get-Command sccache -ErrorAction Stop
+    $sccacheAvailable = $true
+    $env:RUSTC_WRAPPER = "sccache"
+    Write-Host "sccache enabled for compilation caching"
+} catch {
+    Write-Host "sccache not found, using standard cargo caching"
 }
 
 & cargo build --profile $profile --manifest-path (Join-Path $repoRoot 'Cargo.toml')

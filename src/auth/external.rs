@@ -278,7 +278,16 @@ fn source_contains_oauth_provider(
 }
 
 fn load_api_key_from_source(source: ExternalAuthSource, env_key: &str) -> Option<String> {
-    let auth = load_auth_map(source).ok()?;
+    let auth = match load_auth_map(source) {
+        Ok(auth) => auth,
+        Err(err) => {
+            crate::logging::debug(&format!(
+                "Failed to load external auth from {:?} for {}: {}",
+                source, env_key, err
+            ));
+            return None;
+        }
+    };
     for &provider_key in provider_keys_for_env(env_key) {
         if let Some(entry) = auth.get(provider_key)
             && let Some(key) = extract_api_key(source, entry)

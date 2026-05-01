@@ -30,8 +30,9 @@ pub use jcode_provider_openrouter::{
 };
 use jcode_provider_openrouter::{
     KIMI_FALLBACK_PROVIDERS, ModelCatalogRefreshState, ModelsCache, ParsedProvider, PinSource,
-    ProviderPin, current_unix_secs, known_providers, load_disk_cache, load_disk_cache_entry,
-    load_endpoints_disk_cache, parse_model_spec, save_disk_cache, save_endpoints_disk_cache,
+    ProviderPin, current_unix_secs, known_providers,
+    load_disk_cache, load_disk_cache_entry, load_endpoints_disk_cache, parse_model_spec,
+    save_disk_cache, save_endpoints_disk_cache,
 };
 use reqwest::Client;
 use reqwest::header::HeaderName;
@@ -413,10 +414,14 @@ async fn fetch_models_from_api(
         data: Vec<ModelInfo>,
     }
 
-    let models_response: ModelsResponse = response
-        .json()
+    let response_text = response
+        .text()
         .await
-        .context("Failed to parse models response")?;
+        .context("Failed to read models response body")?;
+
+    let models_response: ModelsResponse = serde_json::from_str(&response_text)
+        .with_context(|| format!("Failed to parse models response from OpenRouter API. Response body (first 500 chars): {}",
+            response_text.chars().take(500).collect::<String>()))?;
 
     save_disk_cache(&models_response.data);
 
@@ -563,6 +568,11 @@ impl OpenRouterProvider {
     /// Return true if this model is a Kimi K2/K2.5 variant (Moonshot).
     fn is_kimi_model(model: &str) -> bool {
         jcode_provider_openrouter::is_kimi_model(model)
+    }
+
+    /// Return true if this model is a DeepSeek variant.
+    fn is_deepseek_model(model: &str) -> bool {
+        jcode_provider_openrouter::is_deepseek_model(model)
     }
 
     /// Parse thinking override from env. Values: "enabled"/"disabled"/"auto".

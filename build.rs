@@ -125,11 +125,14 @@ fn main() {
 
     // Re-run only if these specific files change (prevents timestamp-based rebuilds)
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=.git/HEAD");
-    println!("cargo:rerun-if-changed=.git/index");
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-env-changed=JCODE_RELEASE_BUILD");
     println!("cargo:rerun-if-env-changed=JCODE_BUILD_SEMVER");
+    println!("cargo:rerun-if-env-changed=JCODE_BUILD_GIT_HASH");
+    println!("cargo:rerun-if-env-changed=JCODE_BUILD_GIT_DATE");
+    println!("cargo:rerun-if-env-changed=JCODE_BUILD_GIT_DIRTY");
+    println!("cargo:rerun-if-env-changed=JCODE_BUILD_CHANGELOG_RAW");
+    println!("cargo:rerun-if-env-changed=JCODE_BUILD_METADATA_FILE");
 }
 
 fn parse_semver(value: &str) -> Option<(u32, u32, u32)> {

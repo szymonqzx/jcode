@@ -174,7 +174,10 @@ pub fn synthetic_profile(kind: SyntheticSystemProfile) -> SystemProfile {
 }
 
 pub fn tui_policy() -> TuiPerfPolicy {
-    tui_policy_for(profile(), &crate::config::config().display)
+    // Use default display config to avoid circular dependency during early startup
+    // Config-based overrides are applied lazily when config is fully loaded
+    let default_display = crate::config::DisplayConfig::default();
+    tui_policy_for(profile(), &default_display)
 }
 
 pub fn tui_policy_for(
@@ -284,12 +287,9 @@ fn detect() -> SystemProfile {
         &terminal,
     );
 
-    let tier = match crate::config::config().display.performance.as_str() {
-        "full" => PerformanceTier::Full,
-        "reduced" => PerformanceTier::Reduced,
-        "minimal" => PerformanceTier::Minimal,
-        _ => auto_tier,
-    };
+    // Use auto-detected tier during initialization to avoid circular dependency
+    // Config overrides are applied later in tui_policy() when config is fully loaded
+    let tier = auto_tier;
 
     SystemProfile {
         load_avg_1m,

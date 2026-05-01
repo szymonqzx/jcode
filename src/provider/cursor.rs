@@ -771,66 +771,74 @@ impl fmt::Debug for FieldValue {
 
 fn parse_fields(bytes: &[u8]) -> Result<Vec<ProtobufField>> {
     let mut fields = Vec::new();
-    let mut index = 0usize;
+    let mut index = 0;
+
     while index < bytes.len() {
         let tag = decode_varint(bytes, &mut index)?;
-        let number = tag >> 3;
+        let field_number = tag >> 3;
         let wire_type = (tag & 0x07) as u8;
+
         let value = match wire_type {
             0 => FieldValue::Varint(decode_varint(bytes, &mut index)?),
             1 => {
-                let end = index + 8;
-                let slice = bytes
-                    .get(index..end)
-                    .ok_or_else(|| anyhow::anyhow!("Truncated fixed64 protobuf field"))?;
-                index = end;
-                let mut array = [0u8; 8];
-                array.copy_from_slice(slice);
-                FieldValue::Fixed64(array)
+                let mut arr = [0u8; 8];
+                for i in 0..8 {
+                    arr[i] = bytes.get(index + i)
+                        .ok_or_else(|| anyhow::anyhow!("Truncated fixed64 protobuf field"))?
+                        .clone();
+                }
+                index += 8;
+                FieldValue::Fixed64(arr)
             }
             2 => {
                 let len = decode_varint(bytes, &mut index)? as usize;
-                let end = index + len;
-                let slice = bytes
-                    .get(index..end)
-                    .ok_or_else(|| anyhow::anyhow!("Truncated length-delimited protobuf field"))?;
-                index = end;
-                FieldValue::Bytes(slice.to_vec())
+                let data = bytes.get(index..index + len)
+                    .ok_or_else(|| anyhow::anyhow!("Truncated length-delimited protobuf field"))?
+                    .to_vec();
+                index += len;
+                FieldValue::Bytes(data)
             }
             5 => {
-                let end = index + 4;
-                let slice = bytes
-                    .get(index..end)
-                    .ok_or_else(|| anyhow::anyhow!("Truncated fixed32 protobuf field"))?;
-                index = end;
-                let mut array = [0u8; 4];
-                array.copy_from_slice(slice);
-                FieldValue::Fixed32(array)
+                let mut arr = [0u8; 4];
+                for i in 0..4 {
+                    arr[i] = bytes.get(index + i)
+                        .ok_or_else(|| anyhow::anyhow!("Truncated fixed32 protobuf field"))?
+                        .clone();
+                }
+                index += 4;
+                FieldValue::Fixed32(arr)
             }
             _ => anyhow::bail!("Unsupported protobuf wire type {}", wire_type),
         };
-        fields.push(ProtobufField { number, value });
+
+        fields.push(ProtobufField {
+            number: field_number,
+            value,
+        });
     }
+
     Ok(fields)
 }
 
 fn decode_varint(bytes: &[u8], index: &mut usize) -> Result<u64> {
+    let mut result = 0u64;
     let mut shift = 0u32;
-    let mut value = 0u64;
+
     loop {
-        let byte = *bytes
-            .get(*index)
+        let byte = bytes.get(*index)
             .ok_or_else(|| anyhow::anyhow!("Unexpected EOF while decoding protobuf varint"))?;
         *index += 1;
-        value |= u64::from(byte & 0x7f) << shift;
-        if byte & 0x80 == 0 {
-            return Ok(value);
+        result |= ((byte & 0x7f) as u64) << shift;
+        if (byte & 0x80) == 0 {
+            break;
         }
         shift += 7;
         if shift >= 64 {
             anyhow::bail!("Protobuf varint too large");
         }
     }
+
+    Ok(result)
 }
 
 #[derive(Default)]

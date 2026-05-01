@@ -112,6 +112,7 @@ impl MultiProvider {
                     ActiveProvider::Gemini,
                     ActiveProvider::Cursor,
                     ActiveProvider::OpenRouter,
+                    ActiveProvider::OpenCodeGo,
                 ]
             }
             ActiveProvider::OpenAI => {
@@ -122,6 +123,7 @@ impl MultiProvider {
                     ActiveProvider::Gemini,
                     ActiveProvider::Cursor,
                     ActiveProvider::OpenRouter,
+                    ActiveProvider::OpenCodeGo,
                 ]
             }
             ActiveProvider::Copilot => {
@@ -133,6 +135,7 @@ impl MultiProvider {
                     ActiveProvider::Gemini,
                     ActiveProvider::Cursor,
                     ActiveProvider::OpenRouter,
+                    ActiveProvider::OpenCodeGo,
                 ]
             }
             ActiveProvider::Antigravity => {
@@ -144,6 +147,7 @@ impl MultiProvider {
                     ActiveProvider::Gemini,
                     ActiveProvider::Cursor,
                     ActiveProvider::OpenRouter,
+                    ActiveProvider::OpenCodeGo,
                 ]
             }
             ActiveProvider::Gemini => {
@@ -155,6 +159,7 @@ impl MultiProvider {
                     ActiveProvider::Copilot,
                     ActiveProvider::Cursor,
                     ActiveProvider::OpenRouter,
+                    ActiveProvider::OpenCodeGo,
                 ]
             }
             ActiveProvider::Cursor => {
@@ -166,6 +171,20 @@ impl MultiProvider {
                     ActiveProvider::Antigravity,
                     ActiveProvider::Gemini,
                     ActiveProvider::OpenRouter,
+                    ActiveProvider::OpenCodeGo,
+                ]
+            }
+            ActiveProvider::Windsurf => {
+                vec![
+                    ActiveProvider::Windsurf,
+                    ActiveProvider::Claude,
+                    ActiveProvider::OpenAI,
+                    ActiveProvider::Copilot,
+                    ActiveProvider::Antigravity,
+                    ActiveProvider::Gemini,
+                    ActiveProvider::Cursor,
+                    ActiveProvider::OpenRouter,
+                    ActiveProvider::OpenCodeGo,
                 ]
             }
             ActiveProvider::OpenRouter => {
@@ -177,6 +196,19 @@ impl MultiProvider {
                     ActiveProvider::Antigravity,
                     ActiveProvider::Gemini,
                     ActiveProvider::Cursor,
+                    ActiveProvider::OpenCodeGo,
+                ]
+            }
+            ActiveProvider::OpenCodeGo => {
+                vec![
+                    ActiveProvider::OpenCodeGo,
+                    ActiveProvider::Claude,
+                    ActiveProvider::OpenAI,
+                    ActiveProvider::Copilot,
+                    ActiveProvider::Antigravity,
+                    ActiveProvider::Gemini,
+                    ActiveProvider::Cursor,
+                    ActiveProvider::OpenRouter,
                 ]
             }
         }

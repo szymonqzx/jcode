@@ -10,7 +10,6 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::path::PathBuf;
 
-#[cfg(target_os = "windows")]
 use rusqlite::Connection;
 
 /// Windsurf credentials discovered from config and running process
@@ -51,6 +50,24 @@ pub fn vscode_state_path() -> Result<PathBuf> {
 pub fn legacy_config_path() -> Result<PathBuf> {
     let home = dirs::home_dir().context("Failed to determine home directory")?;
     Ok(home.join(".codeium").join("config.json"))
+}
+
+/// Helper function to read a JSON value from the VSCode state database
+/// Returns the JSON string value for the given key, or None if not found
+fn read_state_db_value(state_path: &PathBuf, key: &str) -> Option<String> {
+    if let Ok(conn) = Connection::open(state_path) {
+        if let Ok(mut stmt) = conn.prepare("SELECT value FROM ItemTable WHERE key = ?1;") {
+            if let Ok(mut rows) = stmt.query([key]) {
+                if let Ok(Some(row)) = rows.next() {
+                    if let Ok(value) = row.get::<_, String>(0) {
+                        return Some(value);
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }
 
 /// Get the language server process pattern for the current platform
@@ -127,46 +144,10 @@ pub fn get_csrf_token() -> Result<String> {
     // For newer Windsurf versions (1.9577+), read from VSCode state database
     let state_path = vscode_state_path()?;
     if state_path.exists() {
-        #[cfg(target_os = "windows")]
-        {
-            // Use rusqlite on Windows
-            if let Ok(conn) = Connection::open(&state_path) {
-                if let Ok(mut stmt) = conn.prepare("SELECT value FROM ItemTable WHERE key = 'windsurfAuthStatus';") {
-                    if let Ok(mut rows) = stmt.query([]) {
-                        if let Ok(Some(row)) = rows.next() {
-                            if let Ok(value) = row.get::<_, String>(0) {
-                                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&value) {
-                                    if let Some(csrf) = parsed.get("csrfToken").and_then(|v| v.as_str()) {
-                                        return Ok(csrf.to_string());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            let output = std::process::Command::new("sqlite3")
-                .args([
-                    &state_path.to_string_lossy(),
-                    "SELECT value FROM ItemTable WHERE key = 'windsurfAuthStatus';"
-                ])
-                .output()
-                .context("Failed to run sqlite3 to read Windsurf auth status");
-
-            if let Ok(output) = output {
-                if output.status.success() {
-                    let result = String::from_utf8_lossy(&output.stdout).trim();
-                    if !result.is_empty() {
-                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(result) {
-                            if let Some(csrf) = parsed.get("csrfToken").and_then(|v| v.as_str()) {
-                                return Ok(csrf.to_string());
-                            }
-                        }
-                    }
+        if let Some(value) = read_state_db_value(&state_path, "windsurfAuthStatus") {
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&value) {
+                if let Some(csrf) = parsed.get("csrfToken").and_then(|v| v.as_str()) {
+                    return Ok(csrf.to_string());
                 }
             }
         }
@@ -190,24 +171,78 @@ pub fn get_csrf_token() -> Result<String> {
         }
     }
 
-    anyhow::bail!("CSRF token not found in Windsurf process or config. Is Windsurf running?");
+    anyhow::bail!(
+        "CSRF token not found in Windsurf process or config. Tried: process arguments, VSCode state database ({}), and legacy config ({}). Is Windsurf running and logged in?",
+        state_path.display(),
+        legacy_path.display()
+    );
 }
 
 /// Get the language server gRPC port from running process
 pub fn get_port() -> Result<u16> {
     let process_info = get_language_server_process()?;
 
-    // Extract --extension_server_port and add offset (usually +3)
+    // Extract PID from ps output (second column)
+    let pid_re = regex::Regex::new(r"^\s*\S+\s+(\d+)")?;
+    let _pid = pid_re.captures(&process_info)
+        .and_then(|c| c.get(1))
+        .and_then(|m| m.as_str().parse::<u32>().ok());
+
+    // Extract extension_server_port as a reference point
     let re = regex::Regex::new(r"--extension_server_port\s+(\d+)")?;
-    if let Some(captures) = re.captures(&process_info) {
-        if let Some(port_str) = captures.get(1) {
-            let ext_port: u16 = port_str.as_str().parse()
-                .context("Failed to parse extension_server_port")?;
-            return Ok(ext_port + 3);
+    let ext_port = re.captures(&process_info)
+        .and_then(|c| c.get(1))
+        .and_then(|m| m.as_str().parse::<u16>().ok());
+
+    // Use lsof to find actual listening ports for this specific PID (Unix only)
+    #[cfg(not(target_os = "windows"))]
+    {
+        let pid = pid_re.captures(&process_info)
+            .and_then(|c| c.get(1))
+            .and_then(|m| m.as_str().parse::<u32>().ok());
+
+        if let Some(pid) = pid {
+            if let Ok(lsof_output) = std::process::Command::new("lsof")
+                .args(["-p", &pid.to_string(), "-i", "-P", "-n"])
+                .output()
+            {
+                let stdout = String::from_utf8_lossy(&lsof_output.stdout);
+                // Extract all listening ports
+                let port_re = regex::Regex::new(r":(\d+)\s+\(LISTEN\)")?;
+                let mut ports: Vec<u16> = port_re
+                    .captures_iter(&stdout)
+                    .filter_map(|c| c.get(1))
+                    .filter_map(|m| m.as_str().parse::<u16>().ok())
+                    .collect();
+
+                if !ports.is_empty() {
+                    // If we have extension_server_port, prefer the port closest to it (usually +3)
+                    if let Some(ext) = ext_port {
+                        ports.sort();
+                        let candidate_ports: Vec<u16> = ports.iter().filter(|p| **p > ext).cloned().collect();
+                        if !candidate_ports.is_empty() {
+                            return Ok(candidate_ports[0]);
+                        }
+                    }
+                    // Otherwise return the first listening port
+                    return Ok(ports[0]);
+                }
+            }
         }
     }
 
+    // Fallback: try common offsets (+3, +2, +4)
+    if let Some(ext) = ext_port {
+        crate::logging::warn(&format!(
+            "Windsurf port detection using fallback offset (extension_server_port {} + 3 = {}). This may not be correct.",
+            ext,
+            ext + 3
+        ));
+        return Ok(ext + 3);
+    }
+
     // Fallback to default port
+    crate::logging::warn("Windsurf port detection using default port 42100. This may not be correct.");
     Ok(42100)
 }
 
@@ -217,47 +252,10 @@ pub fn get_api_key() -> Result<String> {
     // Try VSCode state database first
     let state_path = vscode_state_path()?;
     if state_path.exists() {
-        #[cfg(target_os = "windows")]
-        {
-            // Use rusqlite on Windows
-            if let Ok(conn) = Connection::open(&state_path) {
-                if let Ok(mut stmt) = conn.prepare("SELECT value FROM ItemTable WHERE key = 'windsurfAuthStatus';") {
-                    if let Ok(mut rows) = stmt.query([]) {
-                        if let Ok(Some(row)) = rows.next() {
-                            if let Ok(value) = row.get::<_, String>(0) {
-                                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&value) {
-                                    if let Some(api_key) = parsed.get("apiKey").and_then(|v| v.as_str()) {
-                                        return Ok(api_key.to_string());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            // Try to read from SQLite database using sqlite3 CLI
-            let output = std::process::Command::new("sqlite3")
-                .args([
-                    &state_path.to_string_lossy(),
-                    "SELECT value FROM ItemTable WHERE key = 'windsurfAuthStatus';"
-                ])
-                .output()
-                .context("Failed to run sqlite3 to read Windsurf auth status");
-
-            if let Ok(output) = output {
-                if output.status.success() {
-                    let result = String::from_utf8_lossy(&output.stdout).trim();
-                    if !result.is_empty() {
-                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(result) {
-                            if let Some(api_key) = parsed.get("apiKey").and_then(|v| v.as_str()) {
-                                return Ok(api_key.to_string());
-                            }
-                        }
-                    }
+        if let Some(value) = read_state_db_value(&state_path, "windsurfAuthStatus") {
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&value) {
+                if let Some(api_key) = parsed.get("apiKey").and_then(|v| v.as_str()) {
+                    return Ok(api_key.to_string());
                 }
             }
         }
@@ -304,6 +302,9 @@ pub fn get_windsurf_version() -> Result<String> {
 }
 
 /// Load all Windsurf credentials
+///
+/// CSRF token and API key are optional - some Windsurf versions or configurations
+/// may not require them. Port and version are required for the provider to function.
 pub fn load_credentials() -> Result<WindsurfCredentials> {
     Ok(WindsurfCredentials {
         csrf_token: get_csrf_token().ok(),

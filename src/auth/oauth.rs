@@ -292,7 +292,7 @@ pub fn wait_for_callback(port: u16, expected_state: &str) -> Result<String> {
                 bad_request_response("OAuth state mismatch. Please retry the latest login flow.")
                     .as_bytes(),
             );
-            continue;
+            anyhow::bail!("OAuth state mismatch - possible CSRF attack or stale state");
         }
 
         let body = "<html><body><h1>Success!</h1><p>You can close this window.</p></body></html>";

@@ -237,11 +237,13 @@ impl SelfDevTool {
         let target_binary = build::find_dev_binary(&repo_dir)
             .unwrap_or_else(|| build::release_binary_path(&repo_dir));
         if !target_binary.exists() {
+            let script_path = crate::platform::platform_script_path("scripts/dev_cargo.sh");
             return Ok(ToolOutput::new(
                 format!(
                     "No binary found at {}.\n\
-                     Run 'jcode self-dev --build' first, or build with 'scripts/dev_cargo.sh build --profile selfdev -p jcode --bin jcode' and then try reload again.",
-                    target_binary.display()
+                     Run 'jcode self-dev --build' first, or build with '{}' and then try reload again.",
+                    target_binary.display(),
+                    format!("{} build --profile selfdev -p jcode --bin jcode", script_path)
                 )
                 .to_string(),
             ));

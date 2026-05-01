@@ -37,6 +37,8 @@ pub struct AuthStatus {
     pub cursor: AuthState,
     /// Google/Gmail OAuth configured
     pub google: AuthState,
+    /// Windsurf provider (auto-discovered from running Windsurf)
+    pub windsurf: AuthState,
     /// Google Gmail has send capability (Full tier)
     pub google_can_send: bool,
 }

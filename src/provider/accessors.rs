@@ -2,59 +2,43 @@ use super::*;
 
 impl MultiProvider {
     pub(super) fn claude_provider(&self) -> Option<Arc<claude::ClaudeProvider>> {
-        self.claude
-            .read()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone()
+        self.claude.read().unwrap().clone()
     }
 
     pub(super) fn anthropic_provider(&self) -> Option<Arc<anthropic::AnthropicProvider>> {
-        self.anthropic
-            .read()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone()
+        self.anthropic.read().unwrap().clone()
     }
 
     pub(super) fn openai_provider(&self) -> Option<Arc<openai::OpenAIProvider>> {
-        self.openai
-            .read()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone()
+        self.openai.read().unwrap().clone()
     }
 
     pub(super) fn antigravity_provider(&self) -> Option<Arc<antigravity::AntigravityCliProvider>> {
-        self.antigravity
-            .read()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone()
+        self.antigravity.read().unwrap().clone()
     }
 
     pub(super) fn gemini_provider(&self) -> Option<Arc<gemini::GeminiProvider>> {
-        self.gemini
-            .read()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone()
+        self.gemini.read().unwrap().clone()
     }
 
     pub(super) fn copilot_provider(&self) -> Option<Arc<copilot::CopilotApiProvider>> {
-        self.copilot_api
-            .read()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone()
+        self.copilot_api.read().unwrap().clone()
     }
 
     pub(super) fn cursor_provider(&self) -> Option<Arc<cursor::CursorCliProvider>> {
-        self.cursor
-            .read()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone()
+        self.cursor.read().unwrap().clone()
+    }
+
+    pub(super) fn windsurf_provider(&self) -> Option<Arc<windsurf::WindsurfProvider>> {
+        self.windsurf.read().unwrap().clone()
     }
 
     pub(super) fn openrouter_provider(&self) -> Option<Arc<openrouter::OpenRouterProvider>> {
-        self.openrouter
-            .read()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone()
+        self.openrouter.read().unwrap().clone()
+    }
+
+    pub(super) fn opencode_go_provider(&self) -> Option<Arc<opencode_go::OpenCodeGoProvider>> {
+        self.opencode_go.read().unwrap().clone()
     }
 
     pub(super) fn has_claude_runtime(&self) -> bool {
@@ -69,7 +53,9 @@ impl MultiProvider {
             ActiveProvider::Antigravity => self.antigravity_provider().is_some(),
             ActiveProvider::Gemini => self.gemini_provider().is_some(),
             ActiveProvider::Cursor => self.cursor_provider().is_some(),
+            ActiveProvider::Windsurf => self.windsurf_provider().is_some(),
             ActiveProvider::OpenRouter => self.openrouter_provider().is_some(),
+            ActiveProvider::OpenCodeGo => self.opencode_go_provider().is_some(),
         }
     }
 

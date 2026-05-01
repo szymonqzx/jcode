@@ -117,9 +117,10 @@ pub fn enable_keyboard_enhancement() -> bool {
         PushKeyboardEnhancementFlags(keyboard_enhancement_flags())
     )
     .is_ok();
-    crate::logging::info(&format!(
+    // Downgrade to debug level - this is expected for terminals that don't support the protocol
+    crate::logging::debug(&format!(
         "Kitty keyboard protocol: {}",
-        if result { "enabled" } else { "FAILED" }
+        if result { "enabled" } else { "not supported by terminal" }
     ));
     result
 }

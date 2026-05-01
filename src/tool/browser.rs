@@ -748,15 +748,12 @@ async fn firefox_run_bridge_command(
     command.stdout(std::process::Stdio::piped());
     command.stderr(std::process::Stdio::piped());
 
-    #[cfg(not(windows))]
+    crate::platform::suppress_child_console_async(&mut command);
+
     if std::env::var("BROWSER_SESSION").is_err()
         && let Some(session_name) = crate::browser::ensure_browser_session(&ctx.session_id)
     {
         command.env("BROWSER_SESSION", session_name);
-    }
-    #[cfg(windows)]
-    {
-        let _ = ctx;
     }
 
     let output = command

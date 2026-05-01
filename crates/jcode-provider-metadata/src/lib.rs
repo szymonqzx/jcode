@@ -34,6 +34,7 @@ pub enum LoginProviderTarget {
     Copilot,
     Gemini,
     Antigravity,
+    Windsurf,
     Google,
 }
 
@@ -49,6 +50,7 @@ pub enum LoginProviderAuthStateKey {
     Gemini,
     Antigravity,
     Cursor,
+    Windsurf,
     Google,
 }
 
@@ -154,7 +156,7 @@ pub const OPENCODE_GO_PROFILE: OpenAiCompatibleProfile = OpenAiCompatibleProfile
     api_key_env: "OPENCODE_GO_API_KEY",
     env_file: "opencode-go.env",
     setup_url: "https://github.com/szymonqzx/jcode#openai-compatible-providers",
-    default_model: Some("THUDM/GLM-4.9"),
+    default_model: Some("deepseek-v4-flash"),
     requires_api_key: true,
 };
 

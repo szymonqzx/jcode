@@ -226,6 +226,16 @@ impl App {
             crate::provider_catalog::LoginProviderTarget::Antigravity => {
                 self.start_antigravity_login()
             }
+            crate::provider_catalog::LoginProviderTarget::Windsurf => {
+                crate::telemetry::record_auth_surface_blocked(
+                    provider.id,
+                    provider.auth_kind.label(),
+                );
+                self.push_display_message(DisplayMessage::error(
+                    "Windsurf is auto-discovered from running Windsurf, no manual login needed."
+                        .to_string(),
+                ));
+            }
             crate::provider_catalog::LoginProviderTarget::Google => {
                 crate::telemetry::record_auth_surface_blocked(
                     provider.id,

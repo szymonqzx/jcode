@@ -67,6 +67,35 @@ pub fn binary_name() -> &'static str {
 
 pub const SELFDEV_CARGO_PROFILE: &str = "selfdev";
 
+/// Detect the profile used to build the current binary from its path.
+/// Returns "dev" if the binary is in target/dev/, otherwise "selfdev".
+pub fn detect_current_profile() -> &'static str {
+    if let Ok(exe) = std::env::current_exe() {
+        // Use path components to reliably detect profile directory
+        let mut components = exe.components().rev();
+
+        // Check if the binary is directly inside a "dev" directory
+        // which is itself inside a "target" directory
+        if let (Some(parent_dir), Some(grandparent_dir)) = (components.next(), components.next()) {
+            if let (Some(parent_name), Some(grandparent_name)) = (
+                parent_dir.as_os_str().to_str(),
+                grandparent_dir.as_os_str().to_str()
+            ) {
+                if parent_name == "dev" && grandparent_name == "target" {
+                    return "dev";
+                }
+            }
+        }
+    }
+    "selfdev"
+}
+
+/// Get the appropriate cargo profile for selfdev builds.
+/// Uses "dev" if the current binary was built with dev profile, otherwise "selfdev".
+pub fn get_selfdev_profile() -> &'static str {
+    detect_current_profile()
+}
+
 fn profile_binary_path(repo_dir: &Path, profile: &str) -> PathBuf {
     repo_dir.join("target").join(profile).join(binary_name())
 }
@@ -76,7 +105,7 @@ pub fn release_binary_path(repo_dir: &Path) -> PathBuf {
 }
 
 pub fn selfdev_binary_path(repo_dir: &Path) -> PathBuf {
-    profile_binary_path(repo_dir, SELFDEV_CARGO_PROFILE)
+    profile_binary_path(repo_dir, get_selfdev_profile())
 }
 
 fn binary_mtime(path: &Path) -> Option<SystemTime> {
@@ -119,30 +148,26 @@ pub fn selfdev_build_command_for_target(
             vec![("jcode", "jcode"), ("jcode-desktop", "jcode-desktop")]
         }
     };
+    let profile = get_selfdev_profile();
     let wrapper = repo_dir.join("scripts").join("dev_cargo.sh");
-    if wrapper.is_file() {
-        let script = wrapper.to_string_lossy();
-        let command = specs
-            .iter()
-            .map(|(package, binary)| {
-                format!(
-                    "{} build --profile {} -p {} --bin {}",
-                    shell_escape(&script),
-                    SELFDEV_CARGO_PROFILE,
-                    package,
-                    binary
-                )
-            })
-            .collect::<Vec<_>>()
-            .join(" && ");
+
+    // On Windows, use cargo directly since dev_cargo.sh is a bash script
+    // that requires WSL or MSYS2. We skip the wrapper and invoke cargo
+    // directly from cmd.exe.
+    #[cfg(windows)]
+    {
+        let _ = wrapper;
+        let command = display_build_command_with_profile("cargo", &specs, profile);
         return SelfDevBuildCommand {
-            program: "bash".to_string(),
-            args: vec!["-lc".to_string(), command],
-            display: display_build_command("scripts/dev_cargo.sh", &specs),
+            program: "cmd.exe".to_string(),
+            args: vec!["/C".to_string(), command.clone()],
+            display: command,
         };
     }
 
-    let command = display_build_command("cargo", &specs);
+    // Note: wrapper.is_file() branch removed as unreachable code
+
+    let command = display_build_command_with_profile("cargo", &specs, profile);
     SelfDevBuildCommand {
         program: "bash".to_string(),
         args: vec!["-lc".to_string(), command.clone()],
@@ -151,12 +176,16 @@ pub fn selfdev_build_command_for_target(
 }
 
 fn display_build_command(program: &str, specs: &[(&str, &str)]) -> String {
+    display_build_command_with_profile(program, specs, SELFDEV_CARGO_PROFILE)
+}
+
+fn display_build_command_with_profile(program: &str, specs: &[(&str, &str)], profile: &str) -> String {
     specs
         .iter()
         .map(|(package, binary)| {
             format!(
                 "{} build --profile {} -p {} --bin {}",
-                program, SELFDEV_CARGO_PROFILE, package, binary
+                program, profile, package, binary
             )
         })
         .collect::<Vec<_>>()
@@ -239,8 +268,10 @@ pub fn current_binary_build_time_string() -> Option<String> {
 /// Find the best development binary in the repo.
 /// Prefers the newest local self-dev or release binary.
 pub fn find_dev_binary(repo_dir: &Path) -> Option<PathBuf> {
+    let profile = get_selfdev_profile();
+    let dev_binary_path = profile_binary_path(repo_dir, profile);
     newest_existing_binary(vec![
-        (selfdev_binary_path(repo_dir), "repo-selfdev"),
+        (dev_binary_path, "repo-dev"),
         (release_binary_path(repo_dir), "repo-release"),
     ])
     .map(|(path, _)| path)
@@ -263,7 +294,7 @@ fn non_empty_env_path(name: &str) -> Option<PathBuf> {
 
 /// Directory for the single launcher path users execute from PATH.
 ///
-/// Defaults to `~/.local/bin` on Unix, `%LOCALAPPDATA%\jcode\bin` on Windows.
+/// Defaults to `~/.jcode/bin` on all platforms.
 /// Overridable with `JCODE_INSTALL_DIR`.
 pub fn launcher_dir() -> Result<PathBuf> {
     if let Some(custom) = non_empty_env_path("JCODE_INSTALL_DIR") {
@@ -274,24 +305,10 @@ pub fn launcher_dir() -> Result<PathBuf> {
         return Ok(sandbox_home.join("bin"));
     }
 
-    #[cfg(windows)]
-    {
-        if let Ok(local) = std::env::var("LOCALAPPDATA") {
-            return Ok(PathBuf::from(local).join("jcode").join("bin"));
-        }
-        Ok(home_dir()?
-            .join("AppData")
-            .join("Local")
-            .join("jcode")
-            .join("bin"))
-    }
-    #[cfg(not(windows))]
-    {
-        Ok(home_dir()?.join(".local").join("bin"))
-    }
+    Ok(home_dir()?.join(".jcode").join("bin"))
 }
 
-/// Path to the launcher binary (`~/.local/bin/jcode` by default).
+/// Path to the launcher binary (`~/.jcode/bin/jcode` by default).
 pub fn launcher_binary_path() -> Result<PathBuf> {
     Ok(launcher_dir()?.join(binary_name()))
 }
@@ -396,8 +413,10 @@ pub fn preferred_reload_candidate(is_selfdev_session: bool) -> Option<(PathBuf, 
 
     let repo_binary = get_repo_dir().and_then(|repo_dir| {
         if is_selfdev_session {
+            let profile = get_selfdev_profile();
+            let dev_binary_path = profile_binary_path(&repo_dir, profile);
             newest_existing_binary(vec![
-                (selfdev_binary_path(&repo_dir), "repo-selfdev"),
+                (dev_binary_path, "repo-dev"),
                 (release_binary_path(&repo_dir), "repo-release"),
             ])
         } else {

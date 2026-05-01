@@ -20,6 +20,9 @@ use tokio_stream::wrappers::ReceiverStream;
 /// that occur when multiple CLI instances run concurrently
 static CLAUDE_CLI_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
+/// Timeout for acquiring the Claude CLI lock to prevent deadlocks
+const CLAUDE_CLI_LOCK_TIMEOUT_SECS: u64 = 300;
+
 const DEFAULT_MODEL: &str = "claude-opus-4-6";
 const DEFAULT_PERMISSION_MODE: &str = "bypassPermissions";
 
@@ -723,7 +726,21 @@ impl Provider for ClaudeProvider {
 
                 // Acquire the global lock to serialize Claude CLI requests
                 // This prevents "ProcessTransport not ready for writing" errors
-                let _guard = CLAUDE_CLI_LOCK.lock().await;
+                let _guard = match tokio::time::timeout(
+                    Duration::from_secs(CLAUDE_CLI_LOCK_TIMEOUT_SECS),
+                    CLAUDE_CLI_LOCK.lock()
+                )
+                .await
+                {
+                    Ok(guard) => guard,
+                    Err(_) => {
+                        let _ = tx.send(Err(anyhow::anyhow!(
+                            "Timed out waiting for Claude CLI lock after {} seconds. Another request may be stuck.",
+                            CLAUDE_CLI_LOCK_TIMEOUT_SECS
+                        ))).await;
+                        return;
+                    }
+                };
 
                 match run_claude_cli(
                     config.clone(),
@@ -806,7 +823,7 @@ impl Provider for ClaudeProvider {
     }
 
     async fn prefetch_models(&self) -> Result<()> {
-        let creds = claude_auth::load_credentials().context("Failed to load Claude credentials")?;
+        let mut creds = claude_auth::load_credentials().context("Failed to load Claude credentials")?;
         let now = chrono::Utc::now().timestamp_millis();
 
         let access_token = if creds.expires_at < now + 300_000 && !creds.refresh_token.is_empty() {
@@ -815,7 +832,12 @@ impl Provider for ClaudeProvider {
             match oauth::refresh_claude_tokens_for_account(&creds.refresh_token, &active_label)
                 .await
             {
-                Ok(refreshed) => refreshed.access_token,
+                Ok(refreshed) => {
+                    // Update creds with refreshed tokens for consistency
+                    creds.access_token = refreshed.access_token.clone();
+                    creds.expires_at = refreshed.expires_at;
+                    refreshed.access_token
+                }
                 Err(err) => {
                     crate::logging::warn(&format!(
                         "Claude OAuth token refresh failed during model prefetch; using fallback list: {}",

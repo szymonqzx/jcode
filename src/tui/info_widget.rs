@@ -318,6 +318,10 @@ pub enum AuthMethod {
     CopilotOAuth,
     /// Google Gemini OAuth
     GeminiOAuth,
+    /// OpenCode Go API key
+    OpenCodeGoApiKey,
+    /// Windsurf (auto-discovered from running Windsurf)
+    Windsurf,
 }
 
 /// Subscription usage info for the info widget

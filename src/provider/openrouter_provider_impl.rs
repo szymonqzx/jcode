@@ -14,15 +14,16 @@ impl Provider for OpenRouterProvider {
         let model = self.model.read().await.clone();
         let thinking_override = Self::thinking_override();
         let thinking_enabled = thinking_override.or_else(|| {
-            if Self::is_kimi_model(&model) {
+            if Self::is_kimi_model(&model) || Self::is_deepseek_model(&model) {
                 Some(true)
             } else {
                 None
             }
         });
         let allow_reasoning = thinking_enabled != Some(false);
-        let include_reasoning_content =
-            thinking_enabled == Some(true) || (allow_reasoning && Self::is_kimi_model(&model));
+        let include_reasoning_content = thinking_enabled == Some(true)
+            || (allow_reasoning && Self::is_kimi_model(&model))
+            || (allow_reasoning && Self::is_deepseek_model(&model));
 
         let mut effective_messages: Vec<Message> = messages.to_vec();
         let cache_supported = self.model_supports_cache(&model).await;

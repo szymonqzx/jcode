@@ -1,6 +1,7 @@
 use super::{ALL_CLAUDE_MODELS, ALL_OPENAI_MODELS};
 use crate::auth;
 use crate::provider::cursor;
+use crate::provider::windsurf;
 
 #[path = "models_catalog.rs"]
 mod catalog;
@@ -1253,6 +1254,8 @@ pub fn provider_for_model_with_hint(
         Some("antigravity")
     } else if cursor::is_known_model(model) {
         Some("cursor")
+    } else if windsurf::is_known_model(model) {
+        Some("windsurf")
     } else {
         None
     }

@@ -292,14 +292,29 @@ fn test_selfdev_build_command_prefers_repo_wrapper_when_present() {
     let temp = tempfile::tempdir().expect("tempdir");
     let scripts_dir = temp.path().join("scripts");
     std::fs::create_dir_all(&scripts_dir).expect("create scripts dir");
+
+    #[cfg(windows)]
+    std::fs::write(scripts_dir.join("dev_cargo.ps1"), "#!/usr/bin/env pwsh\n")
+        .expect("write wrapper");
+    #[cfg(not(windows))]
     std::fs::write(scripts_dir.join("dev_cargo.sh"), "#!/usr/bin/env bash\n")
         .expect("write wrapper");
 
     let build = build::selfdev_build_command(temp.path());
-    assert_eq!(build.program, "bash");
-    assert_eq!(build.args.first().map(String::as_str), Some("-lc"));
-    let command = build.args.get(1).expect("shell command");
-    assert!(command.contains("dev_cargo.sh' build --profile selfdev -p jcode --bin jcode"));
+    #[cfg(windows)]
+    {
+        assert_eq!(build.program, "pwsh");
+        assert_eq!(build.args.first().map(String::as_str), Some("-File"));
+        let command = build.args.get(1).expect("script path");
+        assert!(command.contains("dev_cargo.ps1"));
+    }
+    #[cfg(not(windows))]
+    {
+        assert_eq!(build.program, "bash");
+        assert_eq!(build.args.first().map(String::as_str), Some("-lc"));
+        let command = build.args.get(1).expect("shell command");
+        assert!(command.contains("dev_cargo.sh' build --profile selfdev -p jcode --bin jcode"));
+    }
     assert!(!command.contains("jcode-desktop"));
     assert!(build.display.contains("-p jcode --bin jcode"));
     assert!(!build.display.contains("jcode-desktop"));
@@ -309,11 +324,20 @@ fn test_selfdev_build_command_prefers_repo_wrapper_when_present() {
 fn test_selfdev_build_command_falls_back_to_cargo_when_wrapper_missing() {
     let temp = tempfile::tempdir().expect("tempdir");
     let build = build::selfdev_build_command(temp.path());
-    assert_eq!(build.program, "bash");
-    assert_eq!(build.args.first().map(String::as_str), Some("-lc"));
-    let command = build.args.get(1).expect("shell command");
-    assert!(command.contains("cargo build --profile selfdev -p jcode --bin jcode"));
+    #[cfg(windows)]
+    {
+        assert_eq!(build.program, "cargo");
+    }
+    #[cfg(not(windows))]
+    {
+        assert_eq!(build.program, "bash");
+        assert_eq!(build.args.first().map(String::as_str), Some("-lc"));
+        let command = build.args.get(1).expect("shell command");
+        assert!(command.contains("cargo build --profile selfdev -p jcode --bin jcode"));
+    }
     assert!(!command.contains("jcode-desktop"));
+    assert!(build.display.contains("-p jcode --bin jcode"));
+    assert!(!build.display.contains("jcode-desktop"));
 }
 
 #[test]

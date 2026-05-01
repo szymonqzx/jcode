@@ -94,6 +94,8 @@ pub enum ProviderChoice {
     Copilot,
     Gemini,
     Antigravity,
+    #[value(alias = "codeium")]
+    Windsurf,
     Google,
     Auto,
 }
@@ -139,6 +141,7 @@ impl ProviderChoice {
             Self::Copilot => "copilot",
             Self::Gemini => "gemini",
             Self::Antigravity => "antigravity",
+            Self::Windsurf => "windsurf",
             Self::Google => "google",
             Self::Auto => "auto",
         }
@@ -226,6 +229,7 @@ pub fn login_provider_for_choice(choice: &ProviderChoice) -> Option<LoginProvide
         ProviderChoice::Copilot => Some(crate::provider_catalog::COPILOT_LOGIN_PROVIDER),
         ProviderChoice::Gemini => Some(crate::provider_catalog::GEMINI_LOGIN_PROVIDER),
         ProviderChoice::Antigravity => Some(crate::provider_catalog::ANTIGRAVITY_LOGIN_PROVIDER),
+        ProviderChoice::Windsurf => None,
         ProviderChoice::Google => Some(crate::provider_catalog::GOOGLE_LOGIN_PROVIDER),
         ProviderChoice::Auto => None,
     }
@@ -275,6 +279,7 @@ pub fn choice_for_login_provider(provider: LoginProviderDescriptor) -> Option<Pr
         LoginProviderTarget::Copilot => Some(ProviderChoice::Copilot),
         LoginProviderTarget::Gemini => Some(ProviderChoice::Gemini),
         LoginProviderTarget::Antigravity => Some(ProviderChoice::Antigravity),
+        LoginProviderTarget::Windsurf => None,
         LoginProviderTarget::Google => Some(ProviderChoice::Google),
     }
 }
@@ -1043,6 +1048,9 @@ pub async fn login_and_bootstrap_provider(
             crate::env::set_var("JCODE_ACTIVE_PROVIDER", "antigravity");
             Arc::new(provider::antigravity::AntigravityCliProvider::new())
         }
+        LoginProviderTarget::Windsurf => {
+            anyhow::bail!("Windsurf is auto-discovered from running Windsurf, not available as a bootstrap provider");
+        }
         LoginProviderTarget::Google => {
             anyhow::bail!("Google login cannot be used as a model provider bootstrap");
         }
@@ -1267,6 +1275,14 @@ async fn init_provider_with_options(
             unlock_model_provider();
             crate::env::set_var("JCODE_ACTIVE_PROVIDER", "antigravity");
             Arc::new(provider::antigravity::AntigravityCliProvider::new())
+        }
+        ProviderChoice::Windsurf => {
+            disable_subscription_runtime_mode();
+            unlock_model_provider();
+            crate::env::set_var("JCODE_ACTIVE_PROVIDER", "windsurf");
+            let multi = provider::MultiProvider::new_fast();
+            init_notice("Using Windsurf provider (auto-discovered)");
+            Arc::new(multi)
         }
         ProviderChoice::Google => {
             disable_subscription_runtime_mode();

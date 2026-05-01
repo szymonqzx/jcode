@@ -1,10 +1,37 @@
 [build]
 # Use sccache for compilation caching
-rustc-wrapper = "sccache"
+# Set RUSTC_WRAPPER=sccache in your shell env; no hardcoded path needed.
 # CI overrides this file, so leaving rustc-wrapper unset here is safe.
 # Local fast-linker selection is handled by scripts/dev_cargo.sh so we don't
 # hard-force a linker mode that may be broken on a contributor machine.
 jobs = 4
+rustflags = ["threads=4", "share-generics"]
+incremental = true
 
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-fuse-ld=lld", "-C", "target-cpu=native"]
+
+# Uncomment and install sccache for dependency caching:
+# cargo install sccache
+# $env:RUSTC_WRAPPER="sccache"
+# [build]
+# rustc-wrapper = "sccache"
+
+# Nightly-only optimizations (experimental)
+# Install nightly toolchain first: rustup install nightly
+# Then uncomment the desired optimizations below:
+# NOTE: These flags are enabled below for faster compilation with nightly toolchain
+
+# Cranelift backend (faster compilation, lower quality code - dev builds only)
+# [unstable]
+# codegen-backend = true
+#
+# [profile.dev]
+# codegen-backend = "cranelift"
+
+# Share generics across crates (nightly only)
+# [build]
+# rustflags = ["-Z", "share-generics"]

@@ -15,6 +15,7 @@ pub mod login_flows;
 pub mod oauth;
 pub mod refresh_state;
 mod status_types;
+pub mod windsurf;
 pub mod validation;
 
 pub(crate) use commands::{command_available_from_env, command_exists};
@@ -37,8 +38,6 @@ use std::sync::{Mutex, RwLock};
 use std::time::Instant;
 
 static AUTH_STATUS_CACHE: std::sync::LazyLock<RwLock<Option<(AuthStatus, Instant)>>> =
-    std::sync::LazyLock::new(|| RwLock::new(None));
-static AUTH_STATUS_FAST_CACHE: std::sync::LazyLock<RwLock<Option<(AuthStatus, Instant)>>> =
     std::sync::LazyLock::new(|| RwLock::new(None));
 
 const AUTH_STATUS_CACHE_TTL_SECS: u64 = 30;
@@ -96,9 +95,6 @@ impl AuthStatus {
         if let Ok(mut cache) = AUTH_STATUS_CACHE.write() {
             *cache = Some((status.clone(), Instant::now()));
         }
-        if let Ok(mut cache) = AUTH_STATUS_FAST_CACHE.write() {
-            *cache = Some((status.clone(), Instant::now()));
-        }
 
         status
     }
@@ -113,20 +109,13 @@ impl AuthStatus {
     pub fn check_fast() -> Self {
         if let Ok(cache) = AUTH_STATUS_CACHE.read()
             && let Some((ref status, ref when)) = *cache
-            && when.elapsed().as_secs() < AUTH_STATUS_CACHE_TTL_SECS
-        {
-            return status.clone();
-        }
-
-        if let Ok(cache) = AUTH_STATUS_FAST_CACHE.read()
-            && let Some((ref status, ref when)) = *cache
             && when.elapsed().as_secs() < AUTH_STATUS_FAST_CACHE_TTL_SECS
         {
             return status.clone();
         }
 
         let status = Self::check_uncached_fast();
-        if let Ok(mut cache) = AUTH_STATUS_FAST_CACHE.write() {
+        if let Ok(mut cache) = AUTH_STATUS_CACHE.write() {
             *cache = Some((status.clone(), Instant::now()));
         }
 
@@ -173,6 +162,7 @@ impl AuthStatus {
             LoginProviderAuthStateKey::Antigravity => self.antigravity,
             LoginProviderAuthStateKey::Gemini => self.gemini,
             LoginProviderAuthStateKey::Cursor => self.cursor,
+            LoginProviderAuthStateKey::Windsurf => self.windsurf,
             LoginProviderAuthStateKey::Google => self.google,
         }
     }
@@ -466,9 +456,6 @@ impl AuthStatus {
         if let Ok(mut cache) = AUTH_STATUS_CACHE.write() {
             *cache = None;
         }
-        if let Ok(mut cache) = AUTH_STATUS_FAST_CACHE.write() {
-            *cache = None;
-        }
         crate::auth::copilot::invalidate_github_token_cache();
     }
 
@@ -611,6 +598,13 @@ impl AuthStatus {
             }
         }
 
+        // Check Windsurf (auto-discovered from running Windsurf)
+        status.windsurf = if windsurf::is_available() {
+            AuthState::Available
+        } else {
+            AuthState::NotConfigured
+        };
+
         status
     }
 
@@ -750,6 +744,13 @@ impl AuthStatus {
         }
 
         timings.push(("google", step_start.elapsed().as_millis()));
+
+        // Check Windsurf (auto-discovered from running Windsurf)
+        status.windsurf = if windsurf::is_available() {
+            AuthState::Available
+        } else {
+            AuthState::NotConfigured
+        };
 
         let nonzero: Vec<String> = timings
             .iter()
@@ -911,6 +912,7 @@ fn assessment_for_key(
         LoginProviderAuthStateKey::Jcode
         | LoginProviderAuthStateKey::Azure
         | LoginProviderAuthStateKey::OpenRouterLike
+        | LoginProviderAuthStateKey::Windsurf
         | LoginProviderAuthStateKey::ExternalImport => (
             AuthCredentialSource::None,
             "not configured".to_string(),
