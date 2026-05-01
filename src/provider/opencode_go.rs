@@ -15,7 +15,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
-use reqwest::{Client, StatusCode};
+use reqwest::Client;
 use serde_json::Value;
 use std::sync::{Arc, RwLock};
 use std::sync::{Arc, RwLock};
@@ -23,23 +23,27 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
 /// Helper function to recover from poisoned RwLock with logging
+#[allow(dead_code)]
 fn recover_rwlock_read<T, F>(lock: &RwLock<T>, fallback: F, context: &str) -> T
 where
+    T: Clone,
     F: FnOnce(&T) -> T,
 {
-    lock.read().unwrap_or_else(|e| {
+    lock.read().map(|guard| guard.clone()).unwrap_or_else(|e| {
         crate::logging::warn(&format!("Recovering from poisoned RwLock in opencode-go provider ({})", context));
         let guard = e.into_inner();
         fallback(&guard)
-    }).clone()
+    })
 }
 
 /// Helper function to recover from poisoned RwLock with logging (write)
+#[allow(dead_code)]
 fn recover_rwlock_write<T, F>(lock: &RwLock<T>, fallback: F, context: &str) -> T
 where
+    T: Clone,
     F: FnOnce(&T) -> T,
 {
-    lock.write().unwrap_or_else(|e| {
+    lock.write().map(|guard| guard.clone()).unwrap_or_else(|e| {
         crate::logging::warn(&format!("Recovering from poisoned RwLock in opencode-go provider ({})", context));
         let guard = e.into_inner();
         fallback(&guard)
@@ -90,7 +94,7 @@ impl OpenCodeGoProvider {
         Self {
             client: crate::provider::shared_http_client(),
             model: Arc::new(RwLock::new(model)),
-            api_base: crate::provider_catalog::normalize_api_base(&api_base).unwrap_or_else(|_| DEFAULT_API_BASE.to_string()),
+            api_base: crate::provider_catalog::normalize_api_base(&api_base).unwrap_or(DEFAULT_API_BASE.to_string()),
             api_key,
         }
     }
@@ -112,7 +116,7 @@ impl OpenCodeGoProvider {
         let openai_messages = build_openai_messages(messages, system)?;
         let openai_tools = build_tools(tools);
 
-        let model = recover_rwlock_read(&self.model, |guard| guard, "model read");
+        let model = recover_rwlock_read(&self.model, |guard| guard.clone(), "model read");
         let mut request_body = serde_json::json!({
             "model": model,
             "model": model,
@@ -187,7 +191,7 @@ impl Provider for OpenCodeGoProvider {
     }
 
     fn model(&self) -> String {
-        recover_rwlock_read(&self.model, |guard| guard, "model read")
+        self.model.read().unwrap().clone()
     }
 
     fn set_model(&self, model: &str) -> Result<()> {
@@ -195,7 +199,7 @@ impl Provider for OpenCodeGoProvider {
         if trimmed.is_empty() {
             anyhow::bail!("OpenCode Go model cannot be empty");
         }
-        *recover_rwlock_write(&self.model, |guard| guard, "model write") = trimmed.to_string();
+        *self.model.write().unwrap() = trimmed.to_string();
         Ok(())
     }
 
@@ -398,20 +402,21 @@ fn build_openai_messages(messages: &[Message], system: &str) -> Result<Vec<Value
                 }
             } else {
                 // Multiple non-tool blocks (text/reasoning)
-                serde_json::json!(non_tool_blocks
+                let blocks: Vec<Value> = non_tool_blocks
                     .iter()
                     .map(|block| match block {
-                        ContentBlock::Text { text, .. } => serde_json::json!({
+                        ContentBlock::Text { text, .. } => Ok(serde_json::json!({
                             "type": "text",
                             "text": text
-                        }),
-                        ContentBlock::Reasoning { text } => serde_json::json!({
+                        })),
+                        ContentBlock::Reasoning { text } => Ok(serde_json::json!({
                             "type": "text",
                             "text": text
-                        }),
+                        })),
                         _ => anyhow::bail!("Unsupported content block type in multi-block message: {:?}", block),
                     })
-                    .collect::<Vec<_>>())
+                    .collect::<Result<Vec<_>>>()?;
+                serde_json::json!(blocks)
             }
         };
 
@@ -471,7 +476,7 @@ async fn convert_openai_stream_to_anthropic(
                                     }
                                     message_end_sent = true;
                                 }
-                                return;
+                                break;
                             }
 
                             if let Ok(json) = serde_json::from_str::<Value>(data) {
@@ -494,15 +499,22 @@ async fn convert_openai_stream_to_anthropic(
                                                     if let Some(id) = tool_call.get("id").and_then(|v| v.as_str()) {
                                                         if let Some(function) = tool_call.get("function") {
                                                             if let Some(name) = function.get("name").and_then(|v| v.as_str()) {
+                                                                // Send tool use start event
+                                                                if tx.send(Ok(StreamEvent::ToolUseStart {
+                                                                    id: id.to_string(),
+                                                                    name: name.to_string(),
+                                                                })).await.is_err() {
+                                                                    return;
+                                                                }
                                                                 if let Some(arguments) = function.get("arguments").and_then(|v| v.as_str()) {
-                                                                    // Send tool use event
-                                                                    if tx.send(Ok(StreamEvent::ToolUse {
-                                                                        id: id.to_string(),
-                                                                        name: name.to_string(),
-                                                                        input: arguments.to_string(),
-                                                                    })).await.is_err() {
+                                                                    // Send tool input delta event
+                                                                    if tx.send(Ok(StreamEvent::ToolInputDelta(arguments.to_string()))).await.is_err() {
                                                                         return;
                                                                     }
+                                                                }
+                                                                // Send tool use end event
+                                                                if tx.send(Ok(StreamEvent::ToolUseEnd)).await.is_err() {
+                                                                    return;
                                                                 }
                                                             }
                                                         }
@@ -519,7 +531,7 @@ async fn convert_openai_stream_to_anthropic(
                                                     }
                                                     message_end_sent = true;
                                                 }
-                                                return;
+                                                break;
                                             }
                                         }
                                     }

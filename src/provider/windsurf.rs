@@ -19,23 +19,27 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 /// Helper function to recover from poisoned RwLock with logging
+#[allow(dead_code)]
 fn recover_rwlock_read<T, F>(lock: &RwLock<T>, fallback: F, context: &str) -> T
 where
+    T: Clone,
     F: FnOnce(&T) -> T,
 {
-    lock.read().unwrap_or_else(|e| {
+    lock.read().map(|guard| guard.clone()).unwrap_or_else(|e| {
         crate::logging::warn(&format!("Recovering from poisoned RwLock in windsurf provider ({})", context));
         let guard = e.into_inner();
         fallback(&guard)
-    }).clone()
+    })
 }
 
 /// Helper function to recover from poisoned RwLock with logging (write)
+#[allow(dead_code)]
 fn recover_rwlock_write<T, F>(lock: &RwLock<T>, fallback: F, context: &str) -> T
 where
+    T: Clone,
     F: FnOnce(&T) -> T,
 {
-    lock.write().unwrap_or_else(|e| {
+    lock.write().map(|guard| guard.clone()).unwrap_or_else(|e| {
         crate::logging::warn(&format!("Recovering from poisoned RwLock in windsurf provider ({})", context));
         let guard = e.into_inner();
         fallback(&guard)
@@ -70,6 +74,7 @@ const MODEL_ENUMS: &[(&str, i32)] = &[
 #[derive(Clone, Copy, PartialEq)]
 enum ChatMessageSource {
     User = 1,
+    #[allow(dead_code)]
     System = 2,
     Assistant = 3,
     Tool = 4,
@@ -524,19 +529,19 @@ impl WindsurfProvider {
 
     /// Get the current model
     pub fn model(&self) -> String {
-        recover_rwlock_read(&self.model, |guard| guard, "model read")
+        self.model.read().unwrap().clone()
     }
 
     /// Set the model
     pub fn set_model(&self, model: String) {
-        *recover_rwlock_write(&self.model, |guard| guard, "model write") = model;
+        *self.model.write().unwrap() = model;
     }
 
     /// Refresh credentials from disk
     pub fn refresh_credentials(&self) -> Result<()> {
         let new_creds = windsurf_auth::load_credentials()
             .context("Failed to refresh Windsurf credentials")?;
-        *recover_rwlock_write(&self.credentials, |guard| guard, "credentials write") = new_creds;
+        *self.credentials.write().unwrap() = new_creds;
         Ok(())
     }
 }
@@ -555,7 +560,7 @@ impl Provider for WindsurfProvider {
         let (tx, rx) = mpsc::channel(100);
 
         // Clone credentials and messages for the async task
-        let credentials = recover_rwlock_read(&self.credentials, |guard| guard, "credentials read");
+        let credentials = self.credentials.read().unwrap().clone();
         let model = self.model();
         let messages = messages.to_vec();
         let system = system.to_string();
@@ -565,11 +570,21 @@ impl Provider for WindsurfProvider {
 
         tokio::spawn(async move {
             // Build gRPC request with protobuf encoding
-            let model_enum = resolve_model_enum(&model)
-                .map_err(|e| anyhow::anyhow!("Failed to resolve Windsurf model: {}", e))?;
+            let model_enum = match resolve_model_enum(&model) {
+                Ok(e) => e,
+                Err(e) => {
+                    let _ = tx.send(Err(e)).await;
+                    return;
+                }
+            };
             let model_name = &model;
-            let api_key = credentials.api_key.as_deref()
-                .ok_or_else(|| anyhow::anyhow!("Windsurf API key not found. Please login to Windsurf first."))?;
+            let api_key = match credentials.api_key.as_deref() {
+                Some(k) => k,
+                None => {
+                    let _ = tx.send(Err(anyhow::anyhow!("Windsurf API key not found. Please login to Windsurf first."))).await;
+                    return;
+                }
+            };
             let version = &credentials.version;
 
             // Build tool-calling prompt if tools are provided
@@ -705,7 +720,7 @@ impl Provider for WindsurfProvider {
     }
 
     fn set_model(&self, model: &str) -> anyhow::Result<()> {
-        *recover_rwlock_write(&self.model, |guard| guard, "model write") = model.to_string();
+        *self.model.write().unwrap() = model.to_string();
         Ok(())
     }
 
