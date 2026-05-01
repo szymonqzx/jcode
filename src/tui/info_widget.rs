@@ -318,6 +318,10 @@ pub enum AuthMethod {
     CopilotOAuth,
     /// Google Gemini OAuth
     GeminiOAuth,
+    /// OpenCode Go API key
+    OpenCodeGoApiKey,
+    /// Windsurf (auto-discovered from running Windsurf)
+    Windsurf,
 }
 
 /// Subscription usage info for the info widget
@@ -484,7 +488,7 @@ pub struct GraphEdge {
     pub kind: String,
 }
 
-pub use jcode_tui_mermaid::DiagramInfo;
+pub use crate::tui::mermaid::DiagramInfo;
 
 /// Git repository status for the info widget
 #[derive(Debug, Clone)]

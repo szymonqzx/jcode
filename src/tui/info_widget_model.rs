@@ -103,6 +103,8 @@ pub(super) fn render_model_widget(data: &InfoWidgetData, inner: Rect) -> Vec<Lin
             AuthMethod::OpenRouterApiKey => ("🔑", "API Key", rgb(140, 180, 255)),
             AuthMethod::CopilotOAuth => ("🔐", "OAuth", rgb(110, 200, 140)),
             AuthMethod::GeminiOAuth => ("🔐", "OAuth", rgb(120, 190, 255)),
+            AuthMethod::OpenCodeGoApiKey => ("🔑", "API Key", rgb(150, 200, 255)),
+            AuthMethod::Windsurf => ("🌊", "Auto-discovered", rgb(100, 180, 200)),
             AuthMethod::Unknown => unreachable!(),
         };
 
@@ -203,6 +205,8 @@ pub(super) fn render_model_info(data: &InfoWidgetData, inner: Rect) -> Vec<Line<
                 AuthMethod::OpenRouterApiKey => ("🔑", "API Key", rgb(140, 180, 255)),
                 AuthMethod::CopilotOAuth => ("🔐", "OAuth", rgb(110, 200, 140)),
                 AuthMethod::GeminiOAuth => ("🔐", "OAuth", rgb(120, 190, 255)),
+                AuthMethod::OpenCodeGoApiKey => ("🔑", "API Key", rgb(150, 200, 255)),
+                AuthMethod::Windsurf => ("🌊", "Auto-discovered", rgb(100, 180, 200)),
                 AuthMethod::Unknown => unreachable!(),
             };
             if !detail_spans.is_empty() {

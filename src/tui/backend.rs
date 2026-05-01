@@ -752,12 +752,24 @@ impl RemoteConnection {
                     match serde_json::from_str(&self.line_buffer) {
                         Ok(event) => return RemoteRead::Event(event),
                         Err(error) => {
-                            crate::logging::warn(&format!(
-                                "RemoteConnection::next_event: protocol error={} line={:?} (session_id={:?}, client_instance_id={:?})",
-                                error, self.line_buffer, self.session_id, self.client_instance_id
-                            ));
+                            // "expected ident at line 1 column 2" typically means we received empty or invalid JSON
+                            // This can happen during connection shutdown or server restart
+                            let error_str = error.to_string();
+                            let is_trivial_parse_error = error_str.contains("expected ident")
+                                || error_str.contains("EOF while parsing");
+                            if is_trivial_parse_error && self.line_buffer.trim().is_empty() {
+                                crate::logging::debug(&format!(
+                                    "RemoteConnection::next_event: received empty line (session_id={:?}, client_instance_id={:?})",
+                                    self.session_id, self.client_instance_id
+                                ));
+                            } else {
+                                crate::logging::warn(&format!(
+                                    "RemoteConnection::next_event: protocol error={} line={:?} (session_id={:?}, client_instance_id={:?})",
+                                    error, self.line_buffer, self.session_id, self.client_instance_id
+                                ));
+                            }
                             return RemoteRead::Disconnected(RemoteDisconnectReason::Protocol(
-                                error.to_string(),
+                                error_str,
                             ));
                         }
                     }

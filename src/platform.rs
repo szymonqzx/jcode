@@ -425,6 +425,43 @@ fn spawn_replacement_process(
     cmd.spawn()
 }
 
+/// Get the appropriate script extension for the current platform.
+///
+/// Returns ".sh" on Unix/Linux/macOS, ".ps1" on Windows.
+pub fn script_extension() -> &'static str {
+    #[cfg(windows)]
+    {
+        ".ps1"
+    }
+    #[cfg(not(windows))]
+    {
+        ".sh"
+    }
+}
+
+/// Replace a script path with the platform-appropriate extension.
+///
+/// Converts "scripts/foo.sh" to "scripts/foo.ps1" on Windows,
+/// leaves it unchanged on Unix/Linux/macOS.
+pub fn platform_script_path(script_path: &str) -> String {
+    if cfg!(windows) && script_path.ends_with(".sh") {
+        script_path.replace(".sh", ".ps1")
+    } else {
+        script_path.to_string()
+    }
+}
+
+/// Get a platform-appropriate script path without allocation when possible.
+///
+/// Returns a borrowed string if no replacement is needed, otherwise allocates.
+pub fn platform_script_path_cow(script_path: &'static str) -> std::borrow::Cow<'static, str> {
+    if cfg!(windows) && script_path.ends_with(".sh") {
+        std::borrow::Cow::Owned(script_path.replace(".sh", ".ps1"))
+    } else {
+        std::borrow::Cow::Borrowed(script_path)
+    }
+}
+
 /// Replace the current process with a new command (exec on Unix).
 ///
 /// On Unix this calls `exec()` which never returns on success — the new

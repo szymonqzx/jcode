@@ -12,6 +12,8 @@ enum WidgetProviderKind {
     OpenRouter,
     Copilot,
     Gemini,
+    OpenCodeGo,
+    Windsurf,
     Unknown,
 }
 
@@ -22,6 +24,8 @@ impl WidgetProviderKind {
             Some(provider) if provider == "copilot" => Self::Copilot,
             Some(provider) if provider == "gemini" => Self::Gemini,
             Some(provider) if provider == "openai" => Self::OpenAI,
+            Some(provider) if provider == "opencode-go" => Self::OpenCodeGo,
+            Some(provider) if provider == "windsurf" => Self::Windsurf,
             Some(provider) if matches!(provider.as_str(), "anthropic" | "claude") => {
                 Self::Anthropic
             }
@@ -172,6 +176,8 @@ impl App {
                     crate::tui::info_widget::AuthMethod::Unknown
                 }
             }
+            WidgetProviderKind::OpenCodeGo => crate::tui::info_widget::AuthMethod::OpenCodeGoApiKey,
+            WidgetProviderKind::Windsurf => crate::tui::info_widget::AuthMethod::Windsurf,
             WidgetProviderKind::Unknown => crate::tui::info_widget::AuthMethod::Unknown,
         }
     }
@@ -275,6 +281,23 @@ impl App {
                 output_tps,
                 available: true,
             }),
+            WidgetProviderKind::OpenCodeGo => Some(crate::tui::info_widget::UsageInfo {
+                provider: crate::tui::info_widget::UsageProvider::CostBased,
+                five_hour: 0.0,
+                five_hour_resets_at: None,
+                seven_day: 0.0,
+                seven_day_resets_at: None,
+                spark: None,
+                spark_resets_at: None,
+                total_cost: self.total_cost,
+                input_tokens: self.total_input_tokens,
+                output_tokens: self.total_output_tokens,
+                cache_read_tokens: self.streaming_cache_read_tokens,
+                cache_write_tokens: self.streaming_cache_creation_tokens,
+                output_tps,
+                available: true,
+            }),
+            WidgetProviderKind::Windsurf => None,
             WidgetProviderKind::Unknown => None,
         }
     }

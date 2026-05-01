@@ -166,6 +166,12 @@ impl App {
                         auth.cursor != crate::auth::AuthState::NotConfigured,
                         String::new(),
                     ),
+                    Some("windsurf") => (
+                        "Windsurf".to_string(),
+                        "windsurf".to_string(),
+                        auth.windsurf != crate::auth::AuthState::NotConfigured,
+                        String::new(),
+                    ),
                     Some("openrouter") => (
                         "auto".to_string(),
                         "openrouter".to_string(),
