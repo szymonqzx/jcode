@@ -2194,6 +2194,7 @@ impl Provider for MultiProvider {
             cursor: RwLock::new(cursor_provider),
             windsurf: RwLock::new(windsurf),
             openrouter: RwLock::new(openrouter),
+            opencode_go: RwLock::new(None),
             active: RwLock::new(active),
             use_claude_cli: self.use_claude_cli,
             startup_notices: RwLock::new(Vec::new()),

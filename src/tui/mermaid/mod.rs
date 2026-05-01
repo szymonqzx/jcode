@@ -118,6 +118,7 @@ pub(crate) fn process_memory_snapshot() -> ProcessMemorySnapshot {
         .unwrap_or_default()
 }
 
+#[allow(dead_code)]
 pub(crate) fn panic_payload_to_string(payload: &(dyn std::any::Any + Send)) -> String {
     if let Some(s) = payload.downcast_ref::<&str>() {
         (*s).to_string()
@@ -134,23 +135,12 @@ pub use active::{
     set_streaming_preview_diagram, snapshot_active_diagrams,
 };
 
-#[path = "mermaid_cache_render.rs"]
-mod cache_render;
-#[path = "mermaid_content.rs"]
-mod content_render;
-#[path = "mermaid_runtime.rs"]
-mod runtime;
-#[path = "mermaid_viewport.rs"]
-mod viewport_render;
-#[path = "mermaid_widget.rs"]
-mod widget_render;
-
 pub use cache_render::{
     RenderResult, deferred_render_epoch, get_cached_path, is_mermaid_lang, render_mermaid,
     render_mermaid_deferred, render_mermaid_deferred_with_registration, render_mermaid_sized,
     render_mermaid_untracked,
 };
-pub use content_render::{
+pub use content::{
     MermaidContent, diagram_placeholder_lines, error_to_lines, estimate_image_height,
     image_widget_placeholder_markdown, parse_image_placeholder, result_to_content, result_to_lines,
     terminal_theme, write_video_export_marker,
@@ -160,8 +150,8 @@ pub use runtime::{
     is_video_export_mode, protocol_type, register_external_image, register_inline_image,
     set_video_export_mode,
 };
-pub use viewport_render::{invalidate_render_state, render_image_widget_viewport};
-pub use widget_render::{render_image_widget, render_image_widget_fit, render_image_widget_scale};
+pub use viewport::{invalidate_render_state, render_image_widget_viewport};
+pub use widget::{render_image_widget, render_image_widget_fit, render_image_widget_scale};
 
 use cache_render::{
     CachedDiagram, MermaidCache, RENDER_CACHE_MAX, RENDER_WIDTH_BUCKET_CELLS,
@@ -173,15 +163,15 @@ use cache_render::{
     retarget_svg_for_png,
 };
 #[cfg(test)]
-use content_render::image_widget_placeholder;
+use content::image_widget_placeholder;
 #[cfg(test)]
 use runtime::{PickerInitMode, infer_protocol_from_env, picker_init_mode_from_probe_env};
-use viewport_render::clear_image_area;
+use viewport::clear_image_area;
 #[cfg(test)]
-use viewport_render::{ensure_kitty_viewport_state, render_kitty_virtual_viewport};
+use viewport::{ensure_kitty_viewport_state, render_kitty_virtual_viewport};
 #[cfg(test)]
-use widget_render::set_cell_if_visible;
-use widget_render::{BORDER_WIDTH, draw_left_border, render_stateful_image_safe};
+use widget::set_cell_if_visible;
+use widget::{BORDER_WIDTH, draw_left_border, render_stateful_image_safe};
 
 /// Render Mermaid source images a bit denser than the immediate terminal-pixel
 /// target so the terminal image protocol scales down from a sharper PNG.
@@ -1192,6 +1182,22 @@ pub fn clear_image_state() {
     if let Ok(mut last) = LAST_RENDER.lock() {
         last.clear();
     }
+}
+
+// Jcode-specific hooks for integrating mermaid with jcode configuration
+pub fn install_jcode_mermaid_hooks() {
+    set_log_hooks(crate::logging::info, crate::logging::warn);
+    set_render_completed_hook(|| {
+        crate::bus::Bus::global().publish(crate::bus::BusEvent::MermaidRenderCompleted);
+    });
+    set_memory_snapshot_hook(|| {
+        let snapshot = crate::process_memory::snapshot_with_source("client:mermaid:memory");
+        ProcessMemorySnapshot {
+            rss_bytes: snapshot.rss_bytes,
+            peak_rss_bytes: snapshot.peak_rss_bytes,
+            virtual_bytes: snapshot.virtual_bytes,
+        }
+    });
 }
 
 #[cfg(test)]

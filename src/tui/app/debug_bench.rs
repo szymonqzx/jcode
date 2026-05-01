@@ -157,7 +157,9 @@ impl App {
         self.status = ProcessingStatus::Idle;
         self.processing_started = None;
         self.status_notice = None;
-        crate::tui::markdown::set_diagram_mode_override(Some(self.diagram_mode));
+        crate::tui::markdown::set_diagram_mode_override(Some(
+            crate::tui::markdown::to_markdown_diagram_mode(self.diagram_mode)
+        ));
 
         use crossterm::event::{KeyModifiers, MouseEvent, MouseEventKind};
         use ratatui::Terminal;
@@ -397,7 +399,9 @@ impl App {
         self.status = ProcessingStatus::Idle;
         self.processing_started = None;
         self.status_notice = None;
-        crate::tui::markdown::set_diagram_mode_override(Some(self.diagram_mode));
+        crate::tui::markdown::set_diagram_mode_override(Some(
+            crate::tui::markdown::to_markdown_diagram_mode(self.diagram_mode)
+        ));
         crate::tui::clear_side_panel_render_caches();
         crate::tui::reset_side_panel_debug_stats();
         crate::tui::markdown::reset_debug_stats();
@@ -780,7 +784,9 @@ impl App {
         crate::tui::visual_debug::enable();
 
         self.diagram_mode = diagram_mode;
-        crate::tui::markdown::set_diagram_mode_override(Some(diagram_mode));
+        crate::tui::markdown::set_diagram_mode_override(Some(
+            crate::tui::markdown::to_markdown_diagram_mode(diagram_mode)
+        ));
 
         let test_content = Self::build_scroll_test_content(diagrams, padding, diagram_override);
         self.display_messages = vec![

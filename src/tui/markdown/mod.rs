@@ -1410,7 +1410,7 @@ pub fn debug_stats() -> MarkdownDebugStats {
 }
 
 pub fn debug_memory_profile() -> MarkdownMemoryProfile {
-    let process = crate::process_memory_snapshot();
+    let process = process_memory_snapshot();
     let mut profile = MarkdownMemoryProfile {
         process_rss_bytes: process.rss_bytes,
         process_peak_rss_bytes: process.peak_rss_bytes,
@@ -1478,6 +1478,55 @@ pub fn progress_bar(progress: f32, width: usize) -> String {
 
 pub fn progress_line(label: &str, progress: f32, width: usize) -> Line<'static> {
     wrap::progress_line(label, progress, width)
+}
+
+// Jcode-specific hooks for integrating markdown with jcode configuration
+pub(crate) fn to_markdown_diagram_mode(
+    mode: crate::config::DiagramDisplayMode,
+) -> DiagramDisplayMode {
+    match mode {
+        crate::config::DiagramDisplayMode::None => DiagramDisplayMode::None,
+        crate::config::DiagramDisplayMode::Margin => DiagramDisplayMode::Margin,
+        crate::config::DiagramDisplayMode::Pinned => DiagramDisplayMode::Pinned,
+    }
+}
+
+#[allow(dead_code)]
+pub(crate) fn from_markdown_diagram_mode(
+    mode: DiagramDisplayMode,
+) -> crate::config::DiagramDisplayMode {
+    match mode {
+        DiagramDisplayMode::None => crate::config::DiagramDisplayMode::None,
+        DiagramDisplayMode::Margin => crate::config::DiagramDisplayMode::Margin,
+        DiagramDisplayMode::Pinned => crate::config::DiagramDisplayMode::Pinned,
+    }
+}
+
+fn to_markdown_spacing_mode(
+    mode: crate::config::MarkdownSpacingMode,
+) -> MarkdownSpacingMode {
+    match mode {
+        crate::config::MarkdownSpacingMode::Compact => MarkdownSpacingMode::Compact,
+        crate::config::MarkdownSpacingMode::Document => MarkdownSpacingMode::Document,
+    }
+}
+
+pub fn install_jcode_markdown_hooks() {
+    set_config_snapshot_hook(|| {
+        let cfg = crate::config::config();
+        MarkdownConfigSnapshot {
+            diagram_mode: to_markdown_diagram_mode(cfg.display.diagram_mode),
+            markdown_spacing: to_markdown_spacing_mode(cfg.display.markdown_spacing),
+        }
+    });
+    set_memory_snapshot_hook(|| {
+        let snapshot = crate::process_memory::snapshot_with_source("client:markdown:memory");
+        ProcessMemorySnapshot {
+            rss_bytes: snapshot.rss_bytes,
+            peak_rss_bytes: snapshot.peak_rss_bytes,
+            virtual_bytes: snapshot.virtual_bytes,
+        }
+    });
 }
 
 #[cfg(test)]

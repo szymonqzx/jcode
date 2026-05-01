@@ -1,5 +1,5 @@
 use super::ACTIVE_DIAGRAMS_MAX;
-use crate::DiagramInfo;
+use crate::tui::mermaid::DiagramInfo;
 use std::sync::{LazyLock, Mutex};
 
 /// Active diagrams for info widget display

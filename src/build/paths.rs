@@ -165,16 +165,18 @@ pub fn selfdev_build_command_for_target(
         };
     }
 
-    // Note: wrapper.is_file() branch removed as unreachable code
-
-    let command = display_build_command_with_profile("cargo", &specs, profile);
-    SelfDevBuildCommand {
-        program: "bash".to_string(),
-        args: vec!["-lc".to_string(), command.clone()],
-        display: command,
+    #[cfg(not(windows))]
+    {
+        let command = display_build_command_with_profile("cargo", &specs, profile);
+        SelfDevBuildCommand {
+            program: "bash".to_string(),
+            args: vec!["-lc".to_string(), command.clone()],
+            display: command,
+        }
     }
 }
 
+#[allow(dead_code)]
 fn display_build_command(program: &str, specs: &[(&str, &str)]) -> String {
     display_build_command_with_profile(program, specs, SELFDEV_CARGO_PROFILE)
 }
@@ -231,6 +233,7 @@ fn infer_selfdev_build_target(repo_dir: &Path) -> SelfDevBuildTarget {
     }
 }
 
+#[allow(dead_code)]
 fn shell_escape(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }

@@ -1,1 +1,1 @@
-pub(crate) use crate::tui::core::stream_buffer::*;
+pub(crate) use jcode_tui_core::stream_buffer::*;

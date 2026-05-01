@@ -1,20 +1,15 @@
 use super::state::{MAX_EVENT_HISTORY, fanout_session_event};
 use super::{FileAccess, SwarmEvent, SwarmEventType, SwarmMember, SwarmState, VersionedPlan};
 use super::{persist_swarm_state_for, remove_persisted_swarm_state_for};
-use crate::agent::Agent;
 use crate::plan::{PlanItem, newly_ready_item_ids, next_runnable_item_ids, summarize_plan_graph};
 use crate::protocol::{NotificationType, ServerEvent};
-use crate::session::Session;
-use anyhow::Result;
-use futures::future::try_join_all;
-use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex as StdMutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::sync::{Mutex, RwLock, broadcast};
+use tokio::sync::{RwLock, broadcast};
 
 fn status_age_secs(last_status_change: Instant) -> u64 {
     last_status_change.elapsed().as_secs()

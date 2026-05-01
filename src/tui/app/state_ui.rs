@@ -780,6 +780,7 @@ impl App {
     }
 }
 
+#[allow(dead_code)]
 fn cache_ratio_pct(numerator: u64, denominator: u64) -> u8 {
     if denominator == 0 {
         0
@@ -790,24 +791,28 @@ fn cache_ratio_pct(numerator: u64, denominator: u64) -> u8 {
     }
 }
 
+#[allow(dead_code)]
 fn opt_u64(value: Option<u64>) -> String {
     value
         .map(|value| value.to_string())
         .unwrap_or_else(|| "None".to_string())
 }
 
+#[allow(dead_code)]
 fn opt_usize(value: Option<usize>) -> String {
     value
         .map(|value| value.to_string())
         .unwrap_or_else(|| "None".to_string())
 }
 
+#[allow(dead_code)]
 fn opt_string(value: Option<&str>) -> String {
     value
         .map(|value| format!("`{}`", value))
         .unwrap_or_else(|| "None".to_string())
 }
 
+#[allow(dead_code)]
 fn push_cache_signature(
     lines: &mut Vec<String>,
     label: &str,
@@ -839,6 +844,7 @@ fn push_cache_signature(
     }
 }
 
+#[allow(dead_code)]
 fn push_cache_baseline(lines: &mut Vec<String>, label: &str, baseline: Option<&KvCacheBaseline>) {
     if let Some(baseline) = baseline {
         lines.push(format!(
@@ -1187,9 +1193,9 @@ pub(super) fn handle_info_command(app: &mut App, trimmed: &str) -> bool {
             context.tool_definition_tokens(),
         ));
         context_report.push_str(&format!(
-            "- system prompt: {} chars\n- env context: {} chars\n- project AGENTS.md: {} ({})\n- global ~/.AGENTS.md: {} ({})\n- prompt overlays: {} chars\n- skills section: {} chars\n- self-dev section: {} chars\n- memory section: {} chars\n- tool definitions: {} chars across {} tools\n- user messages: {} chars across {} messages\n- assistant messages: {} chars across {} messages\n- tool calls: {} chars across {} calls\n- tool results: {} chars across {} results\n",
+            "- system prompt: {} chars\n- session context: {} chars\n- project AGENTS.md: {} ({})\n- global ~/.AGENTS.md: {} ({})\n- prompt overlays: {} chars\n- skills section: {} chars\n- self-dev section: {} chars\n- memory section: {} chars\n- tool definitions: {} chars across {} tools\n- user messages: {} chars across {} messages\n- assistant messages: {} chars across {} messages\n- tool calls: {} chars across {} calls\n- tool results: {} chars across {} results\n",
             context.system_prompt_chars,
-            context.env_context_chars,
+            context.session_context_chars,
             if context.has_project_agents_md { "loaded" } else { "not loaded" },
             context.project_agents_md_chars,
             if context.has_global_agents_md { "loaded" } else { "not loaded" },

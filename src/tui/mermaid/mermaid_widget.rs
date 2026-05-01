@@ -56,10 +56,10 @@ pub(super) fn render_stateful_image_safe(
     })) {
         Ok(()) => true,
         Err(payload) => {
-            crate::log_warn(&format!(
+            crate::tui::mermaid::log_warn(&format!(
                 "Recovered image render panic for diagram {:016x}: {}",
                 hash,
-                crate::panic_payload_to_string(payload.as_ref())
+                crate::cli::terminal::panic_payload_to_string(payload.as_ref())
             ));
             clear_image_area(area, buf);
             false

@@ -28,7 +28,7 @@ mod status;
 mod tests;
 
 pub use launch::{enter_selfdev_session, schedule_selfdev_prompt_delivery};
-pub use reload::{ReloadRecoveryDirective, persisted_background_tasks_note};
+pub use reload::persisted_background_tasks_note;
 pub use status::selfdev_status_output;
 
 #[derive(Debug, Deserialize)]
@@ -345,6 +345,7 @@ impl BuildRequest {
 
 struct BuildLockGuard {
     _file: std::fs::File,
+    #[allow(dead_code)]
     path: PathBuf,
 }
 

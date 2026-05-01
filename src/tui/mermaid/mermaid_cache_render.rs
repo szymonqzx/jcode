@@ -267,7 +267,7 @@ fn deferred_render_sender() -> &'static mpsc::Sender<DeferredRenderTask> {
             .name("jcode-mermaid-deferred".to_string())
             .spawn(move || deferred_render_worker(rx))
         {
-            crate::log_warn(&format!(
+            crate::tui::mermaid::log_warn(&format!(
                 "Failed to spawn mermaid deferred worker, falling back to synchronous rendering: {}",
                 err
             ));
@@ -305,7 +305,7 @@ fn deferred_render_worker(rx: mpsc::Receiver<DeferredRenderTask>) {
             pending.remove(&task.render_key);
         }
         bump_deferred_render_epoch();
-        crate::notify_render_completed();
+        crate::tui::mermaid::notify_render_completed();
     }
 }
 

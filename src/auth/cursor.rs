@@ -332,7 +332,8 @@ pub fn cursor_auth_file_path() -> Result<PathBuf> {
         let app_data = std::env::var("APPDATA")
             .map(|p| PathBuf::from(p).join("Cursor"))
             .unwrap_or_else(|_| {
-                let fallback = crate::storage::user_home_path("AppData/Roaming/Cursor");
+                let fallback = crate::storage::user_home_path("AppData/Roaming/Cursor")
+                    .unwrap_or_else(|_| PathBuf::from("AppData/Roaming/Cursor"));
                 // Validate the fallback path exists before using it
                 if fallback.exists() {
                     fallback

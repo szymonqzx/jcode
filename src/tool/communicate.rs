@@ -973,6 +973,7 @@ impl Tool for CommunicateTool {
                     id: REQUEST_ID,
                     session_id: ctx.session_id.clone(),
                     target_session: target.clone(),
+                    force: None,
                 };
 
                 match send_request(request).await {
@@ -1184,6 +1185,7 @@ impl Tool for CommunicateTool {
                     id: REQUEST_ID,
                     session_id: ctx.session_id.clone(),
                     target_session: params.target_session.clone(),
+                    working_dir: None,
                     prefer_spawn: params.prefer_spawn,
                     spawn_if_needed: params.spawn_if_needed,
                     message: params.message.clone(),
@@ -1231,6 +1233,7 @@ impl Tool for CommunicateTool {
                         id: REQUEST_ID,
                         session_id: ctx.session_id.clone(),
                         target_session: params.target_session.clone(),
+                        working_dir: None,
                         prefer_spawn: params.prefer_spawn,
                         spawn_if_needed: params.spawn_if_needed,
                         message: params.message.clone(),

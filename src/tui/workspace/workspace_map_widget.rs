@@ -1,5 +1,5 @@
-use crate::color_support::rgb;
-use crate::workspace_map::{VisibleWorkspaceRow, WorkspaceSessionVisualState};
+use crate::tui::color_support::rgb;
+use crate::tui::workspace_map::{VisibleWorkspaceRow, WorkspaceSessionVisualState};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,

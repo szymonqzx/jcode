@@ -1610,7 +1610,7 @@ fn render_side_panel_markdown_lines_cached(
 
     let saved_override = markdown::get_diagram_mode_override();
     let saved_centered = markdown::center_code_blocks();
-    markdown::set_diagram_mode_override(Some(crate::config::DiagramDisplayMode::None));
+    markdown::set_diagram_mode_override(Some(markdown::DiagramDisplayMode::None));
     markdown::set_center_code_blocks(centered);
     let lines = wrap_side_panel_markdown_lines(
         markdown::render_markdown_with_width(&page.content, Some(inner_width as usize)),

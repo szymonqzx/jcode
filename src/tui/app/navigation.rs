@@ -508,7 +508,9 @@ impl App {
         if self.diagram_mode != crate::config::DiagramDisplayMode::Pinned {
             self.diagram_mode = crate::config::DiagramDisplayMode::Pinned;
         }
-        super::super::markdown::set_diagram_mode_override(Some(self.diagram_mode));
+        super::super::markdown::set_diagram_mode_override(Some(
+            super::super::markdown::to_markdown_diagram_mode(self.diagram_mode)
+        ));
         self.diagram_pane_enabled = !self.diagram_pane_enabled;
         if !self.diagram_pane_enabled {
             self.diagram_focus = false;

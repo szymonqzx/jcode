@@ -29,8 +29,8 @@ pub fn generated_image_side_panel_markdown(
         });
 
     let mut markdown = String::from("# Generated image\n\n");
-    if let Some(placeholder) = placeholder {
-        markdown.push_str(&placeholder);
+    if let Some(placeholder_str) = &placeholder {
+        markdown.push_str(placeholder_str);
         markdown.push('\n');
     }
     markdown.push_str(&format!("![Generated image]({path})\n\n"));

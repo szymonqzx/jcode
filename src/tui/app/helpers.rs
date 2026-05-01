@@ -486,6 +486,7 @@ fn shell_command(args: &[String]) -> String {
         .join(" ")
 }
 
+#[allow(dead_code)]
 fn push_unique_terminal(candidates: &mut Vec<String>, term: impl Into<String>) {
     let term = term.into();
     if term.trim().is_empty() {
@@ -496,6 +497,7 @@ fn push_unique_terminal(candidates: &mut Vec<String>, term: impl Into<String>) {
     }
 }
 
+#[allow(dead_code)]
 fn detected_resume_terminal() -> Option<&'static str> {
     #[cfg(unix)]
     {
@@ -592,6 +594,7 @@ fn resume_terminal_candidates_unix() -> Vec<String> {
 }
 
 #[cfg(not(unix))]
+#[allow(dead_code)]
 fn resume_terminal_candidates_windows() -> Vec<String> {
     let mut candidates = Vec::new();
     if let Ok(term) = std::env::var("JCODE_TERMINAL") {
