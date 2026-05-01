@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
 const VALIDATION_STATUS_FILE: &str = "auth-validation.json";
@@ -10,11 +10,31 @@ pub fn status_path() -> Result<PathBuf> {
     Ok(crate::storage::jcode_dir()?.join(VALIDATION_STATUS_FILE))
 }
 
-pub fn load_all() -> BTreeMap<String, ProviderValidationRecord> {
-    let Ok(path) = status_path() else {
-        return BTreeMap::new();
-    };
-    crate::storage::read_json(&path).unwrap_or_default()
+pub fn load_all() -> HashMap<String, ProviderValidationRecord> {
+    let path = status_path();
+    match std::fs::read_to_string(&path) {
+        Ok(content) => {
+            match serde_json::from_str::<HashMap<String, ProviderValidationRecord>>(&content) {
+                Ok(records) => records,
+                Err(err) => {
+                    crate::logging::warn(&format!(
+                        "Failed to parse validation status file at {}: {}. Using empty map.",
+                        path.display(),
+                        err
+                    ));
+                    HashMap::new()
+                }
+            }
+        }
+        Err(err) => {
+            crate::logging::warn(&format!(
+                "Failed to read validation status file at {}: {}. Using empty map.",
+                path.display(),
+                err
+            ));
+            HashMap::new()
+        }
+    }
 }
 
 pub fn get(provider_id: &str) -> Option<ProviderValidationRecord> {
