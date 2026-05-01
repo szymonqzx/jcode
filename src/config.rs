@@ -51,6 +51,16 @@ pub struct Config {
     /// type = "openai-compatible"
     /// base_url = "https://llm.example.com/v1"
     /// api_key_env = "MY_GATEWAY_API_KEY"
+    ///
+    /// [providers.opencode-go]
+    /// type = "openai-compatible"
+    /// base_url = "https://opencode.ai/zen/go/v1"
+    /// api_key_env = "OPENCODE_GO_API_KEY"
+    /// default_model = "deepseek-v4-flash"
+    ///
+    /// [providers.windsurf]
+    /// type = "windsurf"
+    /// # Windsurf credentials are auto-discovered from running Windsurf installation
     pub providers: BTreeMap<String, NamedProviderConfig>,
 
     /// Agent-specific model defaults

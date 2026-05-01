@@ -352,12 +352,23 @@ fn build_selfdev_hint_prompt() -> String {
 
 /// Build self-dev tools prompt section (static version without dynamic socket path)
 fn build_selfdev_prompt_static() -> String {
-    SELFDEV_MODE_PROMPT.replace("__DEBUG_SOCKET_BLOCK__\n\n", "")
+    let script_path = crate::platform::platform_script_path("scripts/dev_cargo.sh");
+    let script_example = format!("{} build --profile selfdev -p jcode --bin jcode", script_path);
+    let prompt = SELFDEV_MODE_PROMPT.replace("__DEBUG_SOCKET_BLOCK__\n\n", "");
+    prompt.replace(
+        "scripts/dev_cargo.sh build --profile selfdev -p jcode --bin jcode",
+        &script_example
+    )
 }
 
 /// Build self-dev tools prompt section
 fn build_selfdev_prompt() -> String {
-    SELFDEV_MODE_PROMPT.to_string()
+    let script_path = crate::platform::platform_script_path("scripts/dev_cargo.sh");
+    let script_example = format!("{} build --profile selfdev -p jcode --bin jcode", script_path);
+    SELFDEV_MODE_PROMPT.replace(
+        "scripts/dev_cargo.sh build --profile selfdev -p jcode --bin jcode",
+        &script_example
+    )
 }
 
 /// Build immutable session context captured once per session.

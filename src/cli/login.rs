@@ -267,6 +267,9 @@ pub async fn run_login_provider(
             LoginProviderTarget::Antigravity => login_antigravity_flow(options.no_browser)
                 .await
                 .map(|_| LoginFlowOutcome::Completed),
+            LoginProviderTarget::Windsurf => Err(anyhow::anyhow!(
+                "Windsurf login is auto-discovered from running Windsurf, no manual login needed"
+            )),
             LoginProviderTarget::Google => login_google_flow(options.no_browser)
                 .await
                 .map(|_| LoginFlowOutcome::Completed),
@@ -739,21 +742,27 @@ fn login_openai_compatible_flow(
 pub fn read_secret_line() -> Result<String> {
     use crossterm::terminal;
 
-    if !io::stdin().is_terminal() {
+    let is_terminal = io::stdin().is_terminal();
+    let was_raw = crossterm::terminal::is_raw_mode_enabled().unwrap_or(false);
+
+    // If not a terminal, always use regular read_line
+    if !is_terminal {
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
         return Ok(input.trim().to_string());
     }
 
-    let was_raw = crossterm::terminal::is_raw_mode_enabled().unwrap_or(false);
+    // If terminal but raw mode is not enabled, try to enable it
     if !was_raw {
         if terminal::enable_raw_mode().is_err() {
+            // Fall back to regular line reading if raw mode fails
             let mut input = String::new();
             io::stdin().read_line(&mut input)?;
             return Ok(input.trim().to_string());
         }
     }
 
+    // Use crossterm event loop for proper secret input
     struct RawModeGuard(bool);
     impl Drop for RawModeGuard {
         fn drop(&mut self) {
@@ -792,7 +801,6 @@ pub fn read_secret_line() -> Result<String> {
             }
         }
     }
-
     Ok(input.trim().to_string())
 }
 

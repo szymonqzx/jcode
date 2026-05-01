@@ -46,6 +46,8 @@ pub mod memory_types;
 pub mod message;
 pub mod notifications;
 pub mod perf;
+#[cfg(feature = "psmux")]
+pub mod psmux;
 pub mod plan;
 pub mod platform;
 pub mod process_memory;
