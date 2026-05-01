@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
 const VALIDATION_STATUS_FILE: &str = "auth-validation.json";
@@ -11,16 +11,7 @@ pub fn status_path() -> Result<PathBuf> {
 }
 
 pub fn load_all() -> HashMap<String, ProviderValidationRecord> {
-    let path = match status_path() {
-        Ok(p) => p,
-        Err(err) => {
-            crate::logging::warn(&format!(
-                "Failed to get validation status path: {}. Using empty map.",
-                err
-            ));
-            return HashMap::new();
-        }
-    };
+    let path = status_path();
     match std::fs::read_to_string(&path) {
         Ok(content) => {
             match serde_json::from_str::<HashMap<String, ProviderValidationRecord>>(&content) {

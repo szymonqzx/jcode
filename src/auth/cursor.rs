@@ -243,6 +243,7 @@ fn read_vscdb_key(db_path: &PathBuf, key: &str) -> Result<String> {
         key
     ));
     crate::platform::suppress_child_console(&mut command);
+    crate::platform::suppress_child_console(&mut command);
     let output = command_output_with_timeout(&mut command, CURSOR_EXTERNAL_COMMAND_TIMEOUT)
         .context("Failed to run sqlite3 (is it installed?)")?
         .ok_or_else(|| anyhow::anyhow!("sqlite3 timed out reading {}", db_path.display()))?;
@@ -332,8 +333,7 @@ pub fn cursor_auth_file_path() -> Result<PathBuf> {
         let app_data = std::env::var("APPDATA")
             .map(|p| PathBuf::from(p).join("Cursor"))
             .unwrap_or_else(|_| {
-                let fallback = crate::storage::user_home_path("AppData/Roaming/Cursor")
-                    .unwrap_or_else(|_| PathBuf::from("AppData/Roaming/Cursor"));
+                let fallback = crate::storage::user_home_path("AppData/Roaming/Cursor");
                 // Validate the fallback path exists before using it
                 if fallback.exists() {
                     fallback
@@ -516,6 +516,7 @@ async fn refresh_direct_access_token(
             .await
             .context("Failed to decode Cursor token refresh response")?;
         // Update source to indicate tokens were refreshed
+        // Update source to indicate tokens were refreshed
         Ok(CursorDirectTokens {
             access_token: parsed.access_token,
             refresh_token: parsed
@@ -577,6 +578,7 @@ fn token_is_expiring_soon(token: &str) -> bool {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or(0);
+    exp <= now.saturating_add(300)
     exp <= now.saturating_add(300)
 }
 
