@@ -74,38 +74,6 @@ pub(super) async fn maybe_start_async_debug_job(
     trimmed: &str,
     debug_jobs: Arc<RwLock<HashMap<String, DebugJob>>>,
 ) -> Result<Option<String>> {
-    if trimmed.starts_with("swarm_message_async:") {
-        let msg = trimmed
-            .strip_prefix("swarm_message_async:")
-            .unwrap_or("")
-            .trim();
-        if msg.is_empty() {
-            return Err(anyhow::anyhow!("swarm_message_async: requires content"));
-        }
-
-        let job_id = create_job(&agent, &debug_jobs, format!("swarm_message:{}", msg)).await;
-
-        let jobs = Arc::clone(&debug_jobs);
-        let agent = Arc::clone(&agent);
-        let msg = msg.to_string();
-        let job_id_inner = job_id.clone();
-        tokio::spawn(async move {
-            mark_job_running(&jobs, &job_id_inner).await;
-
-            let result = super::run_swarm_message(agent.clone(), &msg).await;
-            let partial_output = if result.is_err() {
-                let agent = agent.lock().await;
-                agent.last_assistant_text()
-            } else {
-                None
-            };
-
-            finish_job(jobs, &job_id_inner, result, partial_output).await;
-        });
-
-        return Ok(Some(serde_json::json!({ "job_id": job_id }).to_string()));
-    }
-
     if trimmed.starts_with("message_async:") {
         let msg = trimmed.strip_prefix("message_async:").unwrap_or("").trim();
         if msg.is_empty() {

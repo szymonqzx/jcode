@@ -169,10 +169,20 @@ async fn handle_lightweight_control_request(
     let event_handle = tokio::spawn(async move {
         while let Some(event) = client_event_rx.recv().await {
             if let Err(error) = write_direct_event(&writer_clone, &event).await {
-                crate::logging::warn(&format!(
-                    "lightweight control writer failed while sending {:?}: {}",
-                    event, error
-                ));
+                // os error 232 (The pipe is being closed) is common on Windows during normal disconnect
+                // downgrade to debug level to reduce log noise
+                let error_str = error.to_string();
+                if error_str.contains("232") || error_str.contains("pipe is being closed") {
+                    crate::logging::debug(&format!(
+                        "lightweight control writer: connection closed (pipe closed) while sending {:?}",
+                        event
+                    ));
+                } else {
+                    crate::logging::warn(&format!(
+                        "lightweight control writer failed while sending {:?}: {}",
+                        event, error
+                    ));
+                }
                 break;
             }
         }
