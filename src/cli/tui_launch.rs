@@ -93,6 +93,24 @@ pub(crate) fn resumed_window_title(session_id: &str) -> String {
     }
 }
 
+#[cfg(unix)]
+fn applescript_escape(text: &str) -> String {
+    text.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+#[cfg(unix)]
+fn sh_escape(text: &str) -> String {
+    format!("'{}'", text.replace('\'', "'\"'\"'"))
+}
+
+#[cfg(unix)]
+fn shell_command(args: &[String]) -> String {
+    args.iter()
+        .map(|arg| sh_escape(arg))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 #[cfg(all(unix, not(target_os = "macos")))]
 fn focus_title_best_effort(title: &str) {
     use std::process::{Command, Stdio};
@@ -113,7 +131,7 @@ fn focus_title_best_effort(title: &str) {
     let _ = crate::platform::spawn_detached(&mut cmd);
 }
 
-#[cfg(any(not(unix), target_os = "macos"))]
+#[cfg(target_os = "macos")]
 fn focus_title_best_effort(_title: &str) {}
 
 pub async fn run_client() -> Result<()> {
@@ -577,21 +595,20 @@ fn find_wezterm_gui_binary() -> Option<String> {
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .output()
+            && output.status.success()
         {
-            if output.status.success() {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                if let Some(line) = stdout.lines().next() {
-                    let trimmed = line.trim();
-                    if !trimmed.is_empty() {
-                        if *bin == "wezterm" {
-                            let p = std::path::Path::new(trimmed);
-                            let gui = p.with_file_name("wezterm-gui.exe");
-                            if gui.exists() {
-                                return Some(gui.to_string_lossy().into_owned());
-                            }
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Some(line) = stdout.lines().next() {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() {
+                    if *bin == "wezterm" {
+                        let p = std::path::Path::new(trimmed);
+                        let gui = p.with_file_name("wezterm-gui.exe");
+                        if gui.exists() {
+                            return Some(gui.to_string_lossy().into_owned());
                         }
-                        return Some(trimmed.to_string());
                     }
+                    return Some(trimmed.to_string());
                 }
             }
         }
@@ -860,8 +877,97 @@ pub fn list_sessions() -> Result<()> {
                 format!("◌ OpenCode {}", &session_id[..session_id.len().min(8)])
             }
         };
+<<<<<<< HEAD
         let command = crate::terminal_launch::TerminalCommand::new(program, args).title(title);
         crate::terminal_launch::spawn_command_in_new_terminal(&command, cwd)
+=======
+
+        #[cfg(unix)]
+        let resume_terminal_candidates = resume_terminal_candidates_unix();
+        #[cfg(not(unix))]
+        let resume_terminal_candidates = resume_terminal_candidates_windows();
+
+        for term in resume_terminal_candidates {
+            let mut cmd = Command::new(term.as_str());
+            cmd.current_dir(cwd)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+
+            match term.as_str() {
+                #[cfg(unix)]
+                "handterm" => {
+                    let command = shell_command(
+                        &std::iter::once(program.to_string_lossy().into_owned())
+                            .chain(args.iter().cloned())
+                            .collect::<Vec<_>>(),
+                    );
+                    cmd.args(["--standalone", "--backend", "gpu", "--exec", &command]);
+                }
+                "kitty" => {
+                    cmd.args(["--title", &title, "-e"])
+                        .arg(&program)
+                        .args(&args);
+                }
+                "wezterm" => {
+                    cmd.args([
+                        "start",
+                        "--always-new-process",
+                        "--",
+                        program.to_string_lossy().as_ref(),
+                    ]);
+                    cmd.args(&args);
+                }
+                "alacritty" => {
+                    cmd.args(["--title", &title, "-e"])
+                        .arg(&program)
+                        .args(&args);
+                }
+                "gnome-terminal" => {
+                    cmd.arg("--title").arg(&title);
+                    cmd.arg("--").arg(&program).args(&args);
+                }
+                "konsole" | "xterm" | "foot" => {
+                    cmd.args(["-e"]).arg(&program).args(&args);
+                }
+                #[cfg(target_os = "macos")]
+                "iterm2" => {
+                    cmd = Command::new("osascript");
+                    cmd.args([
+                        "-e",
+                        &format!(
+                            r#"tell application "iTerm2"
+                                create window with default profile command "{}"
+                            end tell"#,
+                            shell_command(
+                                &std::iter::once(program.to_string_lossy().into_owned())
+                                    .chain(args.iter().cloned())
+                                    .collect::<Vec<_>>()
+                            )
+                        ),
+                    ]);
+                }
+                #[cfg(target_os = "macos")]
+                "terminal" => {
+                    cmd = Command::new("open");
+                    cmd.args([
+                        "-a",
+                        "Terminal",
+                        program.to_str().unwrap_or("jcode"),
+                        "--args",
+                    ]);
+                    cmd.args(&args);
+                }
+                _ => continue,
+            }
+
+            if crate::platform::spawn_detached(&mut cmd).is_ok() {
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
+>>>>>>> 8ee36636613936d242d119e6554c9771599afd78
     }
 
     match tui::session_picker::pick_session()? {
