@@ -89,7 +89,19 @@ pub(crate) struct Args {
 #[derive(Subcommand, Debug)]
 pub(crate) enum Command {
     /// Start the agent server (background daemon)
-    Serve,
+    Serve {
+        /// Internal: mark this server as temporary so it can self-clean when its owner exits.
+        #[arg(long, hide = true)]
+        temporary_server: bool,
+
+        /// Internal: owning process pid for a temporary server.
+        #[arg(long, hide = true)]
+        owner_pid: Option<u32>,
+
+        /// Internal: idle shutdown timeout in seconds for a temporary server.
+        #[arg(long, hide = true)]
+        temp_idle_timeout_secs: Option<u64>,
+    },
 
     /// Connect to a running server
     Connect,
@@ -141,6 +153,18 @@ pub(crate) enum Command {
         /// Gmail/Google access tier for non-interactive flows. Defaults to full.
         #[arg(long, value_enum)]
         google_access_tier: Option<GoogleAccessTierArg>,
+
+        /// OpenAI-compatible API base URL. Used with --provider openai-compatible/custom profiles.
+        #[arg(long)]
+        api_base: Option<String>,
+
+        /// OpenAI-compatible API key. If omitted, jcode prompts securely when needed.
+        #[arg(long)]
+        api_key: Option<String>,
+
+        /// Environment variable name to store/use for an OpenAI-compatible API key.
+        #[arg(long)]
+        api_key_env: Option<String>,
     },
 
     /// Run in simple REPL mode (no TUI)

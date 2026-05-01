@@ -5,10 +5,11 @@ use super::swarm_mutation_state::{
 };
 use super::{
     SessionInterruptQueues, SwarmEvent, SwarmEventType, SwarmMember, SwarmState, VersionedPlan,
-    broadcast_swarm_plan, broadcast_swarm_status, create_headless_session, fanout_session_event,
-    persist_swarm_state_for, record_swarm_event, record_swarm_event_for_session,
-    remove_session_channel_subscriptions, remove_session_from_swarm,
-    remove_session_interrupt_queue, truncate_detail, update_member_status,
+    append_swarm_completion_report_instructions, broadcast_swarm_plan, broadcast_swarm_status,
+    create_headless_session, fanout_session_event, persist_swarm_state_for, record_swarm_event,
+    record_swarm_event_for_session, remove_session_channel_subscriptions,
+    remove_session_from_swarm, remove_session_interrupt_queue, truncate_detail,
+    update_member_status, update_member_status_with_report,
 };
 use crate::agent::Agent;
 use crate::protocol::{NotificationType, ServerEvent};
@@ -195,6 +196,7 @@ async fn register_visible_spawned_member(
                 detail,
                 friendly_name: Some(friendly_name),
                 report_back_to_session_id: report_back_to_session_id.map(str::to_string),
+                latest_completion_report: None,
                 role: "agent".to_string(),
                 joined_at: now,
                 last_status_change: now,
@@ -276,11 +278,15 @@ pub(super) async fn spawn_swarm_agent(
             .unwrap_or(false)
     };
 
+    let startup_message = initial_message
+        .as_deref()
+        .map(append_swarm_completion_report_instructions);
+
     let visible_spawn = prepare_visible_spawn_session(
         resolved_working_dir.as_deref(),
         spawn_model.as_deref(),
         coordinator_is_canary,
-        initial_message.as_deref(),
+        startup_message.as_deref(),
         spawn_visible_session_window,
     );
 
@@ -323,7 +329,7 @@ pub(super) async fn spawn_swarm_agent(
         }
     }?;
 
-    let startup_message = initial_message.clone();
+    let startup_message = startup_message.clone();
     {
         let mut plans = swarm_plans.write().await;
         if let Some(plan) = plans.get_mut(swarm_id)
@@ -407,6 +413,10 @@ pub(super) async fn spawn_swarm_agent(
                     sid_clone.clone(),
                     Arc::clone(&swarm_members2),
                 );
+                let start_message_index = {
+                    let agent = agent_arc.lock().await;
+                    agent.message_count()
+                };
                 let result = process_message_streaming_mpsc(
                     Arc::clone(&agent_arc),
                     &initial_msg,
@@ -415,14 +425,21 @@ pub(super) async fn spawn_swarm_agent(
                     event_tx,
                 )
                 .await;
+                let completion_report = if result.is_ok() {
+                    let agent = agent_arc.lock().await;
+                    agent.latest_assistant_text_after(start_message_index)
+                } else {
+                    None
+                };
                 let (new_status, new_detail) = match result {
                     Ok(()) => ("ready", None),
                     Err(ref error) => ("failed", Some(truncate_detail(&error.to_string(), 120))),
                 };
-                update_member_status(
+                update_member_status_with_report(
                     &sid_clone,
                     new_status,
                     new_detail,
+                    completion_report,
                     &swarm_members2,
                     &swarms_by_id2,
                     Some(&event_history2),
@@ -565,6 +582,19 @@ pub(super) async fn handle_comm_stop(
         return;
     };
 
+    let target_session =
+        match resolve_stop_target_session(&swarm_id, &target_session, swarm_members).await {
+            Ok(target_session) => target_session,
+            Err(message) => {
+                let _ = client_event_tx.send(ServerEvent::Error {
+                    id,
+                    message,
+                    retry_after_secs: None,
+                });
+                return;
+            }
+        };
+
     let stop_allowed = {
         let members = swarm_members.read().await;
         members
@@ -608,6 +638,7 @@ pub(super) async fn handle_comm_stop(
 
     let mut sessions_guard = sessions.write().await;
     let removed_agent = sessions_guard.remove(&target_session);
+    let removed_live_agent = removed_agent.is_some();
     drop(sessions_guard);
     if let Some(agent_arc) = removed_agent {
         remove_session_interrupt_queue(soft_interrupt_queues, &target_session).await;
@@ -629,61 +660,55 @@ pub(super) async fn handle_comm_stop(
                 );
             }
         }
+    }
 
-        let (removed_swarm_id, removed_name) = {
-            let mut members = swarm_members.write().await;
-            if let Some(member) = members.remove(&target_session) {
-                (member.swarm_id, member.friendly_name)
-            } else {
-                (None, None)
-            }
-        };
-        if let Some(ref swarm_id) = removed_swarm_id {
-            record_swarm_event(
-                event_history,
-                event_counter,
-                swarm_event_tx,
-                target_session.clone(),
-                removed_name.clone(),
-                Some(swarm_id.clone()),
-                SwarmEventType::MemberChange {
-                    action: "left".to_string(),
-                },
-            )
-            .await;
-            remove_session_from_swarm(
-                &target_session,
-                swarm_id,
-                swarm_members,
-                swarms_by_id,
-                swarm_coordinators,
-                swarm_plans,
-            )
-            .await;
+    let (removed_swarm_id, removed_name) = {
+        let mut members = swarm_members.write().await;
+        if let Some(member) = members.remove(&target_session) {
+            (member.swarm_id, member.friendly_name)
+        } else {
+            (None, None)
         }
-        remove_session_channel_subscriptions(
-            &target_session,
-            channel_subscriptions,
-            channel_subscriptions_by_session,
-        )
-        .await;
-        finish_request(
-            swarm_mutation_runtime,
-            &mutation_state,
-            PersistedSwarmMutationResponse::Done,
-        )
-        .await;
-    } else {
-        finish_request(
-            swarm_mutation_runtime,
-            &mutation_state,
-            PersistedSwarmMutationResponse::Error {
-                message: format!("Unknown session '{target_session}'"),
-                retry_after_secs: None,
+    };
+    if let Some(ref swarm_id) = removed_swarm_id {
+        record_swarm_event(
+            event_history,
+            event_counter,
+            swarm_event_tx,
+            target_session.clone(),
+            removed_name.clone(),
+            Some(swarm_id.clone()),
+            SwarmEventType::MemberChange {
+                action: "left".to_string(),
             },
         )
         .await;
+        remove_session_from_swarm(
+            &target_session,
+            swarm_id,
+            swarm_members,
+            swarms_by_id,
+            swarm_coordinators,
+            swarm_plans,
+        )
+        .await;
     }
+    remove_session_channel_subscriptions(
+        &target_session,
+        channel_subscriptions,
+        channel_subscriptions_by_session,
+    )
+    .await;
+
+    let response = if removed_live_agent || removed_swarm_id.is_some() {
+        PersistedSwarmMutationResponse::Done
+    } else {
+        PersistedSwarmMutationResponse::Error {
+            message: format!("Unknown session '{target_session}'"),
+            retry_after_secs: None,
+        }
+    };
+    finish_request(swarm_mutation_runtime, &mutation_state, response).await;
 }
 
 fn swarm_stop_allowed_by_owner(
@@ -692,6 +717,68 @@ fn swarm_stop_allowed_by_owner(
     force: bool,
 ) -> bool {
     force || target_member.report_back_to_session_id.as_deref() == Some(req_session_id)
+}
+
+async fn resolve_stop_target_session(
+    swarm_id: &str,
+    target: &str,
+    swarm_members: &Arc<RwLock<HashMap<String, SwarmMember>>>,
+) -> std::result::Result<String, String> {
+    let target = target.trim();
+    if target.is_empty() {
+        return Err("target_session is required.".to_string());
+    }
+
+    let members = swarm_members.read().await;
+    if members
+        .get(target)
+        .is_some_and(|member| member.swarm_id.as_deref() == Some(swarm_id))
+    {
+        return Ok(target.to_string());
+    }
+
+    let mut matches = members
+        .iter()
+        .filter(|(_, member)| member.swarm_id.as_deref() == Some(swarm_id))
+        .filter(|(session_id, member)| {
+            member.friendly_name.as_deref() == Some(target)
+                || session_id.starts_with(target)
+                || session_id.ends_with(target)
+        })
+        .map(|(session_id, member)| {
+            (
+                session_id.clone(),
+                member
+                    .friendly_name
+                    .as_deref()
+                    .unwrap_or(session_id)
+                    .to_string(),
+            )
+        })
+        .collect::<Vec<_>>();
+    matches.sort_by(|a, b| a.0.cmp(&b.0));
+
+    match matches.len() {
+        0 => Err(format!(
+            "Unknown swarm session '{target}'. Use an exact session ID, unique friendly name, or unique session ID prefix/suffix."
+        )),
+        1 => Ok(matches.remove(0).0),
+        _ => Err(format!(
+            "Ambiguous swarm session '{target}' matched: {}. Use an exact session ID.",
+            matches
+                .iter()
+                .map(|(session_id, friendly)| format!("{friendly} [{session_id}]"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+    }
+}
+
+fn swarm_member_status_is_stale_for_coordination(status: &str) -> bool {
+    matches!(
+        status,
+        "crashed" | "failed" | "stopped" | "closed" | "disconnected"
+    )
 }
 
 #[expect(
@@ -708,7 +795,7 @@ async fn ensure_spawn_coordinator_swarm(
     swarm_coordinators: &Arc<RwLock<HashMap<String, String>>>,
     swarm_plans: &Arc<RwLock<HashMap<String, VersionedPlan>>>,
 ) -> Option<String> {
-    let (swarm_id, from_name, coordinator_id) = {
+    let (swarm_id, from_name, coordinator_id, coordinator_is_stale) = {
         let members = swarm_members.read().await;
         let swarm_id = members
             .get(req_session_id)
@@ -722,7 +809,13 @@ async fn ensure_spawn_coordinator_swarm(
         } else {
             None
         };
-        (swarm_id, from_name, coordinator_id)
+        let coordinator_is_stale = coordinator_id.as_ref().is_some_and(|coordinator| {
+            !members.get(coordinator).is_some_and(|member| {
+                member.swarm_id.as_deref() == swarm_id.as_deref()
+                    && !swarm_member_status_is_stale_for_coordination(&member.status)
+            })
+        });
+        (swarm_id, from_name, coordinator_id, coordinator_is_stale)
     };
 
     let Some(swarm_id) = swarm_id else {
@@ -738,7 +831,7 @@ async fn ensure_spawn_coordinator_swarm(
         return Some(swarm_id);
     }
 
-    if coordinator_id.is_some() {
+    if coordinator_id.is_some() && !coordinator_is_stale {
         let _ = client_event_tx.send(ServerEvent::Error {
             id,
             message: permission_error.to_string(),
@@ -751,7 +844,7 @@ async fn ensure_spawn_coordinator_swarm(
         let mut coordinators = swarm_coordinators.write().await;
         match coordinators.get(&swarm_id) {
             Some(existing) if existing == req_session_id => false,
-            Some(_) => {
+            Some(_) if !coordinator_is_stale => {
                 let _ = client_event_tx.send(ServerEvent::Error {
                     id,
                     message: permission_error.to_string(),
@@ -759,7 +852,7 @@ async fn ensure_spawn_coordinator_swarm(
                 });
                 return None;
             }
-            None => {
+            _ => {
                 coordinators.insert(swarm_id.clone(), req_session_id.to_string());
                 true
             }
@@ -803,22 +896,39 @@ async fn require_coordinator_swarm(
     swarm_members: &Arc<RwLock<HashMap<String, SwarmMember>>>,
     swarm_coordinators: &Arc<RwLock<HashMap<String, String>>>,
 ) -> Option<String> {
-    let (swarm_id, is_coordinator) = {
+    let (swarm_id, is_coordinator, coordinator_is_stale) = {
         let members = swarm_members.read().await;
         let swarm_id = members
             .get(req_session_id)
             .and_then(|member| member.swarm_id.clone());
-        let is_coordinator = if let Some(ref swarm_id) = swarm_id {
+        let coordinator_id = if let Some(ref swarm_id) = swarm_id {
             let coordinators = swarm_coordinators.read().await;
-            coordinators
-                .get(swarm_id)
-                .map(|coordinator| coordinator == req_session_id)
-                .unwrap_or(false)
+            coordinators.get(swarm_id).cloned()
         } else {
-            false
+            None
         };
-        (swarm_id, is_coordinator)
+        let is_coordinator = coordinator_id.as_deref() == Some(req_session_id);
+        let coordinator_is_stale = coordinator_id.as_ref().is_some_and(|coordinator| {
+            !members.get(coordinator).is_some_and(|member| {
+                member.swarm_id.as_deref() == swarm_id.as_deref()
+                    && !swarm_member_status_is_stale_for_coordination(&member.status)
+            })
+        });
+        (swarm_id, is_coordinator, coordinator_is_stale)
     };
+
+    if !is_coordinator && coordinator_is_stale {
+        if let Some(ref swarm_id) = swarm_id {
+            let mut coordinators = swarm_coordinators.write().await;
+            coordinators.insert(swarm_id.clone(), req_session_id.to_string());
+            drop(coordinators);
+            let mut members = swarm_members.write().await;
+            if let Some(member) = members.get_mut(req_session_id) {
+                member.role = "coordinator".to_string();
+            }
+            return Some(swarm_id.clone());
+        };
+    }
 
     if !is_coordinator {
         let _ = client_event_tx.send(ServerEvent::Error {

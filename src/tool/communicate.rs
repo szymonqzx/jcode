@@ -10,6 +10,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::collections::HashMap;
 
 const REQUEST_ID: u64 = 1;
 
@@ -667,10 +668,50 @@ fn format_context_history(target: &str, messages: &[HistoryMessage]) -> ToolOutp
     }
 }
 
+#[cfg(test)]
 fn format_awaited_members(
     completed: bool,
     summary: &str,
     members: &[AwaitedMemberStatus],
+) -> ToolOutput {
+    format_awaited_members_with_reports(completed, summary, members, &HashMap::new())
+}
+
+fn truncate_completion_report(report: &str) -> String {
+    const MAX_REPORT_CHARS: usize = 4000;
+    let report = report.trim();
+    if report.chars().count() <= MAX_REPORT_CHARS {
+        return report.to_string();
+    }
+    let suffix = "\n\n[Report truncated by jcode.]";
+    let keep = MAX_REPORT_CHARS.saturating_sub(suffix.chars().count());
+    let mut out: String = report.chars().take(keep).collect();
+    out.push_str(suffix);
+    out
+}
+
+fn latest_assistant_report(messages: &[HistoryMessage]) -> Option<String> {
+    messages.iter().rev().find_map(|message| {
+        if message.role != "assistant" {
+            return None;
+        }
+        let report = message.content.trim();
+        (!report.is_empty()).then(|| truncate_completion_report(report))
+    })
+}
+
+fn resolve_optional_target_session(target: Option<String>, current_session: &str) -> String {
+    match target.as_deref() {
+        Some("current") | None => current_session.to_string(),
+        Some(_) => target.expect("target is Some when as_deref returned Some"),
+    }
+}
+
+fn format_awaited_members_with_reports(
+    completed: bool,
+    summary: &str,
+    members: &[AwaitedMemberStatus],
+    reports: &HashMap<String, String>,
 ) -> ToolOutput {
     let mut output = if completed {
         format!("All members done. {}\n", summary)
@@ -693,7 +734,63 @@ fn format_awaited_members(
         }
     }
 
+    let mut report_members: Vec<_> = members
+        .iter()
+        .filter_map(|member| {
+            member
+                .completion_report
+                .as_ref()
+                .or_else(|| reports.get(&member.session_id))
+                .map(|report| (member, report))
+        })
+        .collect();
+    report_members.sort_by(|(left, _), (right, _)| left.session_id.cmp(&right.session_id));
+    if !report_members.is_empty() {
+        let duplicate_names =
+            duplicate_friendly_names(members.iter().map(|member| member.friendly_name.as_deref()));
+        output.push_str("\nCompletion reports:\n");
+        for (member, report) in report_members {
+            let name = display_friendly_name(
+                member.friendly_name.as_deref(),
+                &member.session_id,
+                &duplicate_names,
+            );
+            output.push_str(&format!(
+                "\n--- {} ({}) ---\n{}\n",
+                name, member.status, report
+            ));
+        }
+    }
+
     ToolOutput::new(output)
+}
+
+async fn fetch_awaited_member_reports(
+    ctx: &ToolContext,
+    members: &[AwaitedMemberStatus],
+) -> HashMap<String, String> {
+    let mut reports = HashMap::new();
+    for member in members.iter().filter(|member| member.done) {
+        let request = Request::CommReadContext {
+            id: REQUEST_ID,
+            session_id: ctx.session_id.clone(),
+            target_session: member.session_id.clone(),
+        };
+        match send_request(request).await {
+            Ok(ServerEvent::CommContextHistory { messages, .. }) => {
+                if let Some(report) = latest_assistant_report(&messages) {
+                    reports.insert(member.session_id.clone(), report);
+                }
+            }
+            Ok(response) => {
+                if check_error(&response).is_some() {
+                    continue;
+                }
+            }
+            Err(_) => continue,
+        }
+    }
+    reports
 }
 
 fn default_await_target_statuses() -> Vec<String> {
@@ -785,6 +882,12 @@ struct CommunicateInput {
     force: Option<bool>,
     #[serde(default)]
     retain_agents: Option<bool>,
+    #[serde(default)]
+    status: Option<String>,
+    #[serde(default)]
+    validation: Option<String>,
+    #[serde(default)]
+    follow_up: Option<String>,
 }
 
 impl CommunicateInput {
@@ -800,7 +903,7 @@ impl Tool for CommunicateTool {
     }
 
     fn description(&self) -> &str {
-        "Coordinate agents. For spawn, prefer providing a prompt so the new agent starts with a concrete task instead of idling."
+        "Coordinate agents. For spawn, prefer providing a prompt so the new agent starts with a concrete task instead of idling. Spawned/assigned agents automatically report their final response back to the owning coordinator."
     }
 
     fn parameters_schema(&self) -> Value {
@@ -813,7 +916,7 @@ impl Tool for CommunicateTool {
                     "type": "string",
                     "enum": ["share", "share_append", "read", "message", "broadcast", "dm", "channel", "list", "list_channels", "channel_members",
                              "propose_plan", "approve_plan", "reject_plan", "spawn", "stop", "assign_role",
-                             "status", "plan_status", "summary", "read_context", "resync_plan", "assign_task", "assign_next", "fill_slots", "run_plan", "cleanup",
+                             "status", "report", "plan_status", "summary", "read_context", "resync_plan", "assign_task", "assign_next", "fill_slots", "run_plan", "cleanup",
                              "start", "start_task", "wake", "resume", "retry", "reassign", "replace", "salvage",
                              "subscribe_channel", "unsubscribe_channel", "await_members"],
                     "description": "Action. For spawn, prefer including prompt with the initial task so the new agent starts useful work immediately."
@@ -825,7 +928,20 @@ impl Tool for CommunicateTool {
                     "type": "string"
                 },
                 "message": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Message body. For action=report, this is the completion report body."
+                },
+                "status": {
+                    "type": "string",
+                    "description": "For action=report: completion status to record, usually ready, blocked, failed, or completed. Defaults to ready."
+                },
+                "validation": {
+                    "type": "string",
+                    "description": "For action=report: tests or validation performed."
+                },
+                "follow_up": {
+                    "type": "string",
+                    "description": "For action=report: blockers or follow-up work."
                 },
                 "to_session": {
                     "type": "string",
@@ -858,7 +974,7 @@ impl Tool for CommunicateTool {
                 },
                 "task_id": {
                     "type": "string",
-                    "description": "Optional plan task ID. If omitted for assign_task, the coordinator assigns the next runnable unassigned task."
+                    "description": "Optional plan task ID. If omitted for assign_task/assign_next, the coordinator picks a runnable task. If omitted for resume/wake/retry/start with target_session, the server resumes the unique assigned task for that session."
                 },
                 "spawn_if_needed": {
                     "type": "boolean",
@@ -1297,9 +1413,8 @@ impl Tool for CommunicateTool {
             }
 
             "status" => {
-                let target = params.target_session.ok_or_else(|| {
-                    anyhow::anyhow!("'target_session' is required for status action")
-                })?;
+                let target =
+                    resolve_optional_target_session(params.target_session, &ctx.session_id);
 
                 let request = Request::CommStatus {
                     id: REQUEST_ID,
@@ -1316,6 +1431,32 @@ impl Tool for CommunicateTool {
                         Ok(ToolOutput::new("No status snapshot returned."))
                     }
                     Err(e) => Err(anyhow::anyhow!("Failed to get status snapshot: {}", e)),
+                }
+            }
+
+            "report" => {
+                let message = params
+                    .message
+                    .ok_or_else(|| anyhow::anyhow!("'message' is required for report action"))?;
+                let request = Request::CommReport {
+                    id: REQUEST_ID,
+                    session_id: ctx.session_id.clone(),
+                    status: params.status,
+                    message,
+                    validation: params.validation,
+                    follow_up: params.follow_up,
+                };
+                match send_request(request).await {
+                    Ok(ServerEvent::CommReportResponse {
+                        status, message, ..
+                    }) => Ok(ToolOutput::new(format!(
+                        "Report recorded with status `{status}`. {message}"
+                    ))),
+                    Ok(response) => {
+                        ensure_success(&response)?;
+                        Ok(ToolOutput::new("Report recorded."))
+                    }
+                    Err(e) => Err(anyhow::anyhow!("Failed to record report: {}", e)),
                 }
             }
 
@@ -1563,9 +1704,16 @@ impl Tool for CommunicateTool {
 
             "start" | "start_task" | "wake" | "resume" | "retry" | "reassign" | "replace"
             | "salvage" => {
-                let task_id = params.task_id.ok_or_else(|| {
-                    anyhow::anyhow!("'task_id' is required for {} action", params.action)
-                })?;
+                let task_id = match params.task_id.clone() {
+                    Some(task_id) => task_id,
+                    None if params.target_session.is_some() => String::new(),
+                    None => {
+                        return Err(anyhow::anyhow!(
+                            "'task_id' is required for {} action unless 'target_session' uniquely identifies the assigned task. Use `swarm list`/`swarm plan_status` to inspect assignments, or pass task_id explicitly.",
+                            params.action
+                        ));
+                    }
+                };
                 if matches!(params.action.as_str(), "reassign" | "replace" | "salvage")
                     && params.target_session.is_none()
                 {
@@ -1678,7 +1826,12 @@ impl Tool for CommunicateTool {
                 let target_status = params
                     .target_status
                     .unwrap_or_else(default_await_target_statuses);
-                let session_ids = params.session_ids.unwrap_or_default();
+                let mut session_ids = params.session_ids.unwrap_or_default();
+                if let Some(target_session) = params.target_session.clone()
+                    && !session_ids.iter().any(|id| id == &target_session)
+                {
+                    session_ids.push(target_session);
+                }
                 let timeout_minutes = params.timeout_minutes.unwrap_or(60);
                 let timeout_secs = timeout_minutes * 60;
 
@@ -1699,7 +1852,12 @@ impl Tool for CommunicateTool {
                         members,
                         summary,
                         ..
-                    }) => Ok(format_awaited_members(completed, &summary, &members)),
+                    }) => {
+                        let reports = fetch_awaited_member_reports(&ctx, &members).await;
+                        Ok(format_awaited_members_with_reports(
+                            completed, &summary, &members, &reports,
+                        ))
+                    }
                     Ok(response) => {
                         ensure_success(&response)?;
                         Ok(ToolOutput::new("Await completed."))

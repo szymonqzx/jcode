@@ -7,417 +7,44 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
-use std::path::PathBuf;
 use std::time::Instant;
 mod active_pids;
 use active_pids::{active_pids_dir, register_active_pid, unregister_active_pid};
 pub use active_pids::{active_session_ids, find_active_session_id_by_pid};
 mod crash;
+mod journal;
+mod memory_profile;
+mod model;
 mod render;
+mod storage_paths;
 pub use crash::{
     CrashedSessionsInfo, detect_crashed_sessions, find_recent_crashed_sessions,
     find_session_by_name_or_id, recover_crashed_sessions,
+};
+pub use jcode_session_types::{EnvSnapshot, GitState, SessionImproveMode, SessionStatus};
+use journal::{
+    PersistVectorMode, SessionJournalEntry, SessionJournalMeta, SessionPersistState,
+    metadata_requires_snapshot,
+};
+pub use memory_profile::SessionMemoryProfileSnapshot;
+use memory_profile::{
+    ContentBlockMemoryStats, SessionMemoryProfileCache, summarize_blocks, summarize_message_content,
+};
+use model::SESSION_CONTEXT_PREFIX;
+pub use model::{
+    StoredCompactionState, StoredDisplayRole, StoredMemoryInjection, StoredMessage,
+    StoredReplayEvent, StoredReplayEventKind, StoredTokenUsage,
 };
 pub use render::{
     RenderedCompactedHistoryInfo, RenderedImage, RenderedImageSource, RenderedMessage,
     has_rendered_images, render_images, render_messages, render_messages_and_images,
     render_messages_and_images_with_compacted_history, summarize_tool_calls,
 };
-
-/// Session exit status - why the session ended
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub enum SessionStatus {
-    /// Session is currently active/running
-    #[default]
-    Active,
-    /// User closed the session normally (Ctrl+C, /quit, etc.)
-    Closed,
-    /// Session crashed (panic, error)
-    Crashed { message: Option<String> },
-    /// Session was reloaded (hot reload)
-    Reloaded,
-    /// Session was compacted (context too large)
-    Compacted,
-    /// Session ended due to rate limiting
-    RateLimited,
-    /// Session ended due to an error
-    Error { message: String },
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub enum SessionImproveMode {
-    #[serde(rename = "improve_run", alias = "run")]
-    ImproveRun,
-    #[serde(rename = "improve_plan", alias = "plan")]
-    ImprovePlan,
-    #[serde(rename = "refactor_run")]
-    RefactorRun,
-    #[serde(rename = "refactor_plan")]
-    RefactorPlan,
-}
-
-impl SessionStatus {
-    /// Get a short display string for the status
-    pub fn display(&self) -> &'static str {
-        match self {
-            SessionStatus::Active => "active",
-            SessionStatus::Closed => "closed",
-            SessionStatus::Crashed { .. } => "crashed",
-            SessionStatus::Reloaded => "reloaded",
-            SessionStatus::Compacted => "compacted",
-            SessionStatus::RateLimited => "rate limited",
-            SessionStatus::Error { .. } => "error",
-        }
-    }
-
-    /// Get an icon for the status
-    pub fn icon(&self) -> &'static str {
-        match self {
-            SessionStatus::Active => "▶",
-            SessionStatus::Closed => "✓",
-            SessionStatus::Crashed { .. } => "💥",
-            SessionStatus::Reloaded => "🔄",
-            SessionStatus::Compacted => "📦",
-            SessionStatus::RateLimited => "⏳",
-            SessionStatus::Error { .. } => "❌",
-        }
-    }
-
-    /// Get additional detail message if available
-    pub fn detail(&self) -> Option<&str> {
-        match self {
-            SessionStatus::Crashed { message } => message.as_deref(),
-            SessionStatus::Error { message } => Some(message.as_str()),
-            _ => None,
-        }
-    }
-}
-
-/// A memory injection event, stored for replay visualization
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StoredMemoryInjection {
-    /// Human-readable summary (e.g., "🧠 auto-recalled 3 memories")
-    pub summary: String,
-    /// The recalled memory content that was injected
-    pub content: String,
-    /// Number of memories recalled
-    pub count: u32,
-    /// Stable memory IDs included in this injection, used to avoid re-injecting
-    /// the same memories after session resume/reload.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub memory_ids: Vec<String>,
-    /// Age of memories in milliseconds
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub age_ms: Option<u64>,
-    /// Message index this injection occurred before (for replay timing)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub before_message: Option<usize>,
-    /// Timestamp when injection occurred
-    pub timestamp: DateTime<Utc>,
-}
-
-/// Extra non-conversation UI/state events persisted for replay fidelity.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct StoredReplayEvent {
-    pub timestamp: DateTime<Utc>,
-    #[serde(flatten)]
-    pub kind: StoredReplayEventKind,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(tag = "event")]
-pub enum StoredReplayEventKind {
-    /// A non-provider display message shown in the UI (e.g. swarm/system notice).
-    #[serde(rename = "display_message")]
-    DisplayMessage {
-        role: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        title: Option<String>,
-        content: String,
-    },
-    /// Historical swarm member status snapshot.
-    #[serde(rename = "swarm_status")]
-    SwarmStatus {
-        members: Vec<crate::protocol::SwarmMemberStatus>,
-    },
-    /// Historical swarm plan snapshot.
-    #[serde(rename = "swarm_plan")]
-    SwarmPlan {
-        swarm_id: String,
-        version: u64,
-        items: Vec<crate::plan::PlanItem>,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        participants: Vec<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        reason: Option<String>,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StoredMessage {
-    pub id: String,
-    pub role: Role,
-    pub content: Vec<ContentBlock>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub display_role: Option<StoredDisplayRole>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timestamp: Option<DateTime<Utc>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tool_duration_ms: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub token_usage: Option<StoredTokenUsage>,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum StoredDisplayRole {
-    System,
-    BackgroundTask,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StoredTokenUsage {
-    pub input_tokens: u64,
-    pub output_tokens: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cache_read_input_tokens: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cache_creation_input_tokens: Option<u64>,
-}
-
-const SESSION_CONTEXT_PREFIX: &str = "<system-reminder>\n# Session Context";
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct StoredCompactionState {
-    pub summary_text: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub openai_encrypted_content: Option<String>,
-    pub covers_up_to_turn: usize,
-    pub original_turn_count: usize,
-    pub compacted_count: usize,
-}
-
-impl StoredMessage {
-    pub fn to_message(&self) -> Message {
-        Message {
-            role: self.role.clone(),
-            content: self.content.clone(),
-            timestamp: self.timestamp,
-            tool_duration_ms: self.tool_duration_ms,
-        }
-    }
-
-    /// Get a text preview of the message content
-    pub fn content_preview(&self) -> String {
-        for block in &self.content {
-            match block {
-                ContentBlock::Text { text, .. } => {
-                    // Return first non-empty text block
-                    let text = text.trim();
-                    if !text.is_empty() {
-                        return text.replace('\n', " ");
-                    }
-                }
-                ContentBlock::ToolUse { name, .. } => {
-                    return format!("[tool: {}]", name);
-                }
-                ContentBlock::ToolResult { content, .. } => {
-                    let preview = content.trim().replace('\n', " ");
-                    if !preview.is_empty() {
-                        return format!("[result: {}]", preview);
-                    }
-                }
-                _ => {}
-            }
-        }
-        "(empty)".to_string()
-    }
-}
-
-const LARGE_MEMORY_BLOB_THRESHOLD_BYTES: usize = 16 * 1024;
-
-#[derive(Debug, Clone, Default)]
-struct ContentBlockMemoryStats {
-    block_count: usize,
-    text_blocks: usize,
-    text_bytes: usize,
-    reasoning_blocks: usize,
-    reasoning_bytes: usize,
-    tool_use_blocks: usize,
-    tool_use_input_json_bytes: usize,
-    tool_result_blocks: usize,
-    tool_result_bytes: usize,
-    image_blocks: usize,
-    image_data_bytes: usize,
-    openai_compaction_blocks: usize,
-    openai_compaction_bytes: usize,
-    large_block_count: usize,
-    large_block_bytes: usize,
-    large_tool_result_count: usize,
-    large_tool_result_bytes: usize,
-    max_block_bytes: usize,
-    max_tool_result_bytes: usize,
-}
-
-impl ContentBlockMemoryStats {
-    fn merge_from(&mut self, other: &Self) {
-        self.block_count += other.block_count;
-        self.text_blocks += other.text_blocks;
-        self.text_bytes += other.text_bytes;
-        self.reasoning_blocks += other.reasoning_blocks;
-        self.reasoning_bytes += other.reasoning_bytes;
-        self.tool_use_blocks += other.tool_use_blocks;
-        self.tool_use_input_json_bytes += other.tool_use_input_json_bytes;
-        self.tool_result_blocks += other.tool_result_blocks;
-        self.tool_result_bytes += other.tool_result_bytes;
-        self.image_blocks += other.image_blocks;
-        self.image_data_bytes += other.image_data_bytes;
-        self.openai_compaction_blocks += other.openai_compaction_blocks;
-        self.openai_compaction_bytes += other.openai_compaction_bytes;
-        self.large_block_count += other.large_block_count;
-        self.large_block_bytes += other.large_block_bytes;
-        self.large_tool_result_count += other.large_tool_result_count;
-        self.large_tool_result_bytes += other.large_tool_result_bytes;
-        self.max_block_bytes = self.max_block_bytes.max(other.max_block_bytes);
-        self.max_tool_result_bytes = self.max_tool_result_bytes.max(other.max_tool_result_bytes);
-    }
-
-    fn record_bytes(&mut self, bytes: usize) {
-        self.max_block_bytes = self.max_block_bytes.max(bytes);
-        if bytes >= LARGE_MEMORY_BLOB_THRESHOLD_BYTES {
-            self.large_block_count += 1;
-            self.large_block_bytes += bytes;
-        }
-    }
-
-    fn record_block(&mut self, block: &ContentBlock) {
-        self.block_count += 1;
-        match block {
-            ContentBlock::Text { text, .. } => {
-                self.text_blocks += 1;
-                self.text_bytes += text.len();
-                self.record_bytes(text.len());
-            }
-            ContentBlock::Reasoning { text } => {
-                self.reasoning_blocks += 1;
-                self.reasoning_bytes += text.len();
-                self.record_bytes(text.len());
-            }
-            ContentBlock::ToolUse { input, .. } => {
-                self.tool_use_blocks += 1;
-                let input_bytes = estimate_json_bytes(input);
-                self.tool_use_input_json_bytes += input_bytes;
-                self.record_bytes(input_bytes);
-            }
-            ContentBlock::ToolResult { content, .. } => {
-                self.tool_result_blocks += 1;
-                self.tool_result_bytes += content.len();
-                self.max_tool_result_bytes = self.max_tool_result_bytes.max(content.len());
-                if content.len() >= LARGE_MEMORY_BLOB_THRESHOLD_BYTES {
-                    self.large_tool_result_count += 1;
-                    self.large_tool_result_bytes += content.len();
-                }
-                self.record_bytes(content.len());
-            }
-            ContentBlock::Image { data, .. } => {
-                self.image_blocks += 1;
-                self.image_data_bytes += data.len();
-                self.record_bytes(data.len());
-            }
-            ContentBlock::OpenAICompaction { encrypted_content } => {
-                self.openai_compaction_blocks += 1;
-                self.openai_compaction_bytes += encrypted_content.len();
-                self.record_bytes(encrypted_content.len());
-            }
-        }
-    }
-
-    fn payload_text_bytes(&self) -> usize {
-        self.text_bytes
-            + self.reasoning_bytes
-            + self.tool_result_bytes
-            + self.image_data_bytes
-            + self.openai_compaction_bytes
-    }
-
-    fn to_json(&self) -> serde_json::Value {
-        serde_json::json!({
-            "content_blocks": self.block_count,
-            "text_blocks": self.text_blocks,
-            "text_bytes": self.text_bytes,
-            "reasoning_blocks": self.reasoning_blocks,
-            "reasoning_bytes": self.reasoning_bytes,
-            "tool_use_blocks": self.tool_use_blocks,
-            "tool_use_input_json_bytes": self.tool_use_input_json_bytes,
-            "tool_result_blocks": self.tool_result_blocks,
-            "tool_result_bytes": self.tool_result_bytes,
-            "image_blocks": self.image_blocks,
-            "image_data_bytes": self.image_data_bytes,
-            "openai_compaction_blocks": self.openai_compaction_blocks,
-            "openai_compaction_bytes": self.openai_compaction_bytes,
-            "large_block_count": self.large_block_count,
-            "large_block_bytes": self.large_block_bytes,
-            "large_tool_result_count": self.large_tool_result_count,
-            "large_tool_result_bytes": self.large_tool_result_bytes,
-            "max_block_bytes": self.max_block_bytes,
-            "max_tool_result_bytes": self.max_tool_result_bytes,
-            "payload_text_bytes": self.payload_text_bytes(),
-        })
-    }
-}
-
-fn summarize_message_content<'a, I>(messages: I) -> ContentBlockMemoryStats
-where
-    I: IntoIterator<Item = &'a Vec<ContentBlock>>,
-{
-    let mut stats = ContentBlockMemoryStats::default();
-    for blocks in messages {
-        for block in blocks {
-            stats.record_block(block);
-        }
-    }
-    stats
-}
-
-fn summarize_blocks(blocks: &[ContentBlock]) -> ContentBlockMemoryStats {
-    let mut stats = ContentBlockMemoryStats::default();
-    for block in blocks {
-        stats.record_block(block);
-    }
-    stats
-}
-
-#[derive(Debug, Clone, Default)]
-struct SessionMemoryProfileCache {
-    messages_count: usize,
-    messages_json_bytes: usize,
-    message_stats: ContentBlockMemoryStats,
-    env_snapshots_count: usize,
-    env_snapshots_json_bytes: usize,
-    memory_injections_count: usize,
-    memory_injections_json_bytes: usize,
-    replay_events_count: usize,
-    replay_events_json_bytes: usize,
-    provider_cache_count: usize,
-    provider_cache_json_bytes: usize,
-    provider_cache_stats: ContentBlockMemoryStats,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct SessionMemoryProfileSnapshot {
-    pub message_count: usize,
-    pub provider_cache_message_count: usize,
-    pub env_snapshot_count: usize,
-    pub memory_injection_count: usize,
-    pub replay_event_count: usize,
-    pub payload_text_bytes: usize,
-    pub total_json_bytes: usize,
-    pub provider_cache_json_bytes: usize,
-    pub canonical_tool_result_bytes: usize,
-    pub provider_cache_tool_result_bytes: usize,
-    pub canonical_large_blob_bytes: usize,
-    pub provider_cache_large_blob_bytes: usize,
-}
+pub(crate) use storage_paths::session_journal_path_from_snapshot;
+#[cfg(test)]
+pub(crate) use storage_paths::session_path_in_dir;
+use storage_paths::{estimate_json_bytes, file_len_or_zero, persist_vector_mode_label};
+pub use storage_paths::{session_exists, session_journal_path, session_path};
 
 fn stored_messages_to_messages(messages: &[StoredMessage]) -> Vec<Message> {
     messages.iter().map(StoredMessage::to_message).collect()
@@ -559,66 +186,6 @@ struct SessionStartupStub {
     save_label: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-struct SessionJournalMeta {
-    parent_id: Option<String>,
-    title: Option<String>,
-    updated_at: DateTime<Utc>,
-    compaction: Option<StoredCompactionState>,
-    provider_session_id: Option<String>,
-    provider_key: Option<String>,
-    model: Option<String>,
-    subagent_model: Option<String>,
-    improve_mode: Option<SessionImproveMode>,
-    autoreview_enabled: Option<bool>,
-    autojudge_enabled: Option<bool>,
-    is_canary: bool,
-    testing_build: Option<String>,
-    working_dir: Option<String>,
-    short_name: Option<String>,
-    status: SessionStatus,
-    last_pid: Option<u32>,
-    last_active_at: Option<DateTime<Utc>>,
-    is_debug: bool,
-    saved: bool,
-    save_label: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct SessionJournalEntry {
-    meta: SessionJournalMeta,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    append_messages: Vec<StoredMessage>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    append_env_snapshots: Vec<EnvSnapshot>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    append_memory_injections: Vec<StoredMemoryInjection>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    append_replay_events: Vec<StoredReplayEvent>,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-enum PersistVectorMode {
-    #[default]
-    Clean,
-    Append,
-    Full,
-}
-
-#[derive(Debug, Clone, Default)]
-struct SessionPersistState {
-    snapshot_exists: bool,
-    messages_len: usize,
-    env_snapshots_len: usize,
-    memory_injections_len: usize,
-    replay_events_len: usize,
-    messages_mode: PersistVectorMode,
-    env_snapshots_mode: PersistVectorMode,
-    memory_injections_mode: PersistVectorMode,
-    replay_events_mode: PersistVectorMode,
-    last_meta: Option<SessionJournalMeta>,
-}
-
 const MAX_SESSION_JOURNAL_BYTES: u64 = 512 * 1024;
 
 /// Max number of environment snapshots to retain per session
@@ -635,37 +202,6 @@ fn env_flag_enabled(name: &str) -> bool {
 
 fn default_is_test_session() -> bool {
     env_flag_enabled("JCODE_TEST_SESSION")
-}
-
-/// Minimal git state for reproducibility
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GitState {
-    pub root: String,
-    pub head: Option<String>,
-    pub branch: Option<String>,
-    pub dirty: Option<bool>,
-}
-
-/// Environment snapshot captured for a session
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EnvSnapshot {
-    pub captured_at: DateTime<Utc>,
-    pub reason: String,
-    pub session_id: String,
-    pub working_dir: Option<String>,
-    pub provider: String,
-    pub model: String,
-    pub jcode_version: String,
-    pub jcode_git_hash: Option<String>,
-    pub jcode_git_dirty: Option<bool>,
-    pub os: String,
-    pub arch: String,
-    pub pid: u32,
-    pub is_selfdev: bool,
-    pub is_debug: bool,
-    pub is_canary: bool,
-    pub testing_build: Option<String>,
-    pub working_git: Option<GitState>,
 }
 
 pub fn derive_session_provider_key(provider_name: &str) -> Option<String> {
@@ -1051,24 +587,6 @@ impl Session {
         if self.persist_state.replay_events_mode != PersistVectorMode::Full {
             self.persist_state.replay_events_mode = PersistVectorMode::Append;
         }
-    }
-
-    fn metadata_requires_snapshot(prev: &SessionJournalMeta, current: &SessionJournalMeta) -> bool {
-        prev.parent_id != current.parent_id
-            || prev.title != current.title
-            || prev.provider_key != current.provider_key
-            || prev.subagent_model != current.subagent_model
-            || prev.improve_mode != current.improve_mode
-            || prev.autoreview_enabled != current.autoreview_enabled
-            || prev.autojudge_enabled != current.autojudge_enabled
-            || prev.is_canary != current.is_canary
-            || prev.testing_build != current.testing_build
-            || prev.working_dir != current.working_dir
-            || prev.short_name != current.short_name
-            || prev.status != current.status
-            || prev.is_debug != current.is_debug
-            || prev.saved != current.saved
-            || prev.save_label != current.save_label
     }
 
     fn apply_journal_meta(&mut self, meta: SessionJournalMeta) {
@@ -1530,7 +1048,7 @@ impl Session {
             .persist_state
             .last_meta
             .as_ref()
-            .is_some_and(|prev| Self::metadata_requires_snapshot(prev, &current_meta));
+            .is_some_and(|prev| metadata_requires_snapshot(prev, &current_meta));
         let vectors_need_snapshot = !self.persist_state.snapshot_exists
             || self.persist_state.messages_mode == PersistVectorMode::Full
             || self.persist_state.env_snapshots_mode == PersistVectorMode::Full
@@ -2054,54 +1572,6 @@ struct RemoteStartupSessionSnapshot {
     saved: bool,
     #[serde(default)]
     save_label: Option<String>,
-}
-
-fn session_path_in_dir(base: &std::path::Path, session_id: &str) -> PathBuf {
-    base.join("sessions").join(format!("{}.json", session_id))
-}
-
-fn estimate_json_bytes<T: Serialize>(value: &T) -> usize {
-    serde_json::to_vec(value)
-        .map(|bytes| bytes.len())
-        .unwrap_or(0)
-}
-
-fn file_len_or_zero(path: &Path) -> u64 {
-    std::fs::metadata(path).map(|meta| meta.len()).unwrap_or(0)
-}
-
-fn persist_vector_mode_label(mode: PersistVectorMode) -> &'static str {
-    match mode {
-        PersistVectorMode::Clean => "clean",
-        PersistVectorMode::Append => "append",
-        PersistVectorMode::Full => "full",
-    }
-}
-
-pub(crate) fn session_journal_path_from_snapshot(path: &Path) -> PathBuf {
-    let mut name = path
-        .file_stem()
-        .map(|stem| stem.to_os_string())
-        .unwrap_or_default();
-    name.push(".journal.jsonl");
-    path.with_file_name(name)
-}
-
-pub fn session_path(session_id: &str) -> Result<PathBuf> {
-    let base = storage::jcode_dir()?;
-    Ok(session_path_in_dir(&base, session_id))
-}
-
-pub fn session_journal_path(session_id: &str) -> Result<PathBuf> {
-    Ok(session_journal_path_from_snapshot(&session_path(
-        session_id,
-    )?))
-}
-
-pub fn session_exists(session_id: &str) -> bool {
-    session_path(session_id)
-        .map(|path| path.exists())
-        .unwrap_or(false)
 }
 
 #[cfg(test)]

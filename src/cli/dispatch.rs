@@ -34,9 +34,16 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
     }
 
     match args.command {
-        Some(Command::Serve) => {
+        Some(Command::Serve {
+            temporary_server,
+            owner_pid,
+            temp_idle_timeout_secs,
+        }) => {
             let serve_start = Instant::now();
             crate::env::set_var("JCODE_NON_INTERACTIVE", "1");
+            if temporary_server {
+                server::configure_temporary_server(owner_pid, temp_idle_timeout_secs);
+            }
             let provider_start = Instant::now();
             let provider =
                 provider_init::init_provider(&args.provider, args.model.as_deref()).await?;
@@ -79,6 +86,9 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             json,
             complete,
             google_access_tier,
+            api_base,
+            api_key,
+            api_key_env,
         }) => {
             login::run_login(
                 &args.provider,
@@ -98,6 +108,10 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
                             auth::google::GmailAccessTier::ReadOnly
                         }
                     }),
+                    openai_compatible_api_base: api_base,
+                    openai_compatible_api_key: api_key,
+                    openai_compatible_api_key_env: api_key_env,
+                    openai_compatible_default_model: args.model.clone(),
                 },
             )
             .await?;
@@ -341,7 +355,13 @@ async fn run_default_command(args: Args) -> Result<()> {
 
     startup_profile::mark("run_main_none_branch");
 
-    if args.resume.is_none() && commands::maybe_run_pending_restart_restore_on_startup().await? {
+    let explicit_provider_or_model = args.provider != ProviderChoice::Auto
+        || args.model.is_some()
+        || args.provider_profile.is_some();
+    if args.resume.is_none()
+        && !explicit_provider_or_model
+        && commands::maybe_run_pending_restart_restore_on_startup().await?
+    {
         return Ok(());
     }
 
@@ -413,7 +433,7 @@ async fn run_default_command(args: Args) -> Result<()> {
         .await;
     }
 
-    if server_running && (args.provider != ProviderChoice::Auto || args.model.is_some()) {
+    if server_running && explicit_provider_or_model {
         output::stderr_info(
             "Server already running; provider/model flags only apply when starting a new server.",
         );
