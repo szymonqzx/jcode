@@ -1158,6 +1158,7 @@ impl Provider for MultiProvider {
                 .openrouter_provider()
                 .map(|openrouter| openrouter.available_models_for_switching())
                 .unwrap_or_default(),
+            ActiveProvider::OpenCodeGo => Vec::new(),
         }
     }
 
@@ -1735,6 +1736,7 @@ impl Provider for MultiProvider {
                 .unwrap_or(false),
             ActiveProvider::Windsurf => false,
             ActiveProvider::OpenRouter => false, // jcode executes tools
+            ActiveProvider::OpenCodeGo => false, // jcode executes tools
         }
     }
 
@@ -1748,6 +1750,7 @@ impl Provider for MultiProvider {
             ActiveProvider::Cursor => None,
             ActiveProvider::Windsurf => None,
             ActiveProvider::OpenRouter => None,
+            ActiveProvider::OpenCodeGo => None,
         }
     }
 
@@ -1774,6 +1777,7 @@ impl Provider for MultiProvider {
             ActiveProvider::Gemini => vec![],
             ActiveProvider::Cursor => vec![],
             ActiveProvider::Windsurf => vec![],
+            ActiveProvider::OpenCodeGo => vec![],
             _ => vec![],
         }
     }
@@ -1853,6 +1857,7 @@ impl Provider for MultiProvider {
             ActiveProvider::Gemini => vec![],
             ActiveProvider::Cursor => vec![],
             ActiveProvider::Windsurf => vec![],
+            ActiveProvider::OpenCodeGo => vec![],
             _ => vec![],
         }
     }
@@ -1893,6 +1898,7 @@ impl Provider for MultiProvider {
                 .openrouter_provider()
                 .map(|o| o.supports_compaction())
                 .unwrap_or(false),
+            ActiveProvider::OpenCodeGo => false,
         }
     }
 
@@ -1932,6 +1938,7 @@ impl Provider for MultiProvider {
                 .openrouter_provider()
                 .map(|o| o.uses_jcode_compaction())
                 .unwrap_or(false),
+            ActiveProvider::OpenCodeGo => false,
         }
     }
 
@@ -2038,6 +2045,9 @@ impl Provider for MultiProvider {
                     Err(anyhow::anyhow!("OpenRouter provider unavailable"))
                 }
             }
+            ActiveProvider::OpenCodeGo => Err(anyhow::anyhow!(
+                "OpenCodeGo does not support native compaction"
+            )),
         }
     }
 
@@ -2100,6 +2110,7 @@ impl Provider for MultiProvider {
                 .openrouter_provider()
                 .map(|o| o.context_window())
                 .unwrap_or(DEFAULT_CONTEXT_LIMIT),
+            ActiveProvider::OpenCodeGo => DEFAULT_CONTEXT_LIMIT,
         }
     }
 
@@ -2223,6 +2234,7 @@ impl Provider for MultiProvider {
             ActiveProvider::Cursor => None,
             ActiveProvider::Windsurf => None,
             ActiveProvider::OpenRouter => None,
+            ActiveProvider::OpenCodeGo => None,
         }
     }
 
