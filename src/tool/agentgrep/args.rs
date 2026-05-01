@@ -90,6 +90,14 @@ pub(super) fn build_outline_args(
     context_json_path: Option<&Path>,
 ) -> Result<OutlineArgs> {
     let file = outline_file_arg(params)?;
+    // Validate that the file path is actually a file, not a directory
+    let resolved = resolve_path_arg(ctx, &file);
+    if !resolved.is_file() {
+        return Err(anyhow::anyhow!(
+            "agentgrep outline requires a file, but '{}' is not a file (it may be a directory or does not exist)",
+            file
+        ));
+    }
     Ok(OutlineArgs {
         file,
         json: false,

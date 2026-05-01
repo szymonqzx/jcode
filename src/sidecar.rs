@@ -78,7 +78,13 @@ impl Sidecar {
                     ));
                     if auth::codex::load_credentials().is_ok() {
                         (SidecarBackend::OpenAI, SIDECAR_OPENAI_MODEL.to_string())
+                    } else if auth::claude::load_credentials().is_ok() {
+                        (SidecarBackend::Claude, SIDECAR_CLAUDE_MODEL.to_string())
                     } else {
+                        // No valid credentials - return error at use time rather than defaulting
+                        crate::logging::warn(
+                            "Memory sidecar: No valid credentials available and no supported model configured. Configure agents.memory_model in config or set up credentials.",
+                        );
                         (SidecarBackend::Claude, SIDECAR_CLAUDE_MODEL.to_string())
                     }
                 }
@@ -88,7 +94,10 @@ impl Sidecar {
         } else if auth::claude::load_credentials().is_ok() {
             (SidecarBackend::Claude, SIDECAR_CLAUDE_MODEL.to_string())
         } else {
-            // Default to Claude - will fail on use with a clear error
+            // No configured model and no credentials - warn instead of silently defaulting
+            crate::logging::warn(
+                "Memory sidecar: No credentials available and no agents.memory_model configured. Set agents.memory_model in config or set up credentials.",
+            );
             (SidecarBackend::Claude, SIDECAR_CLAUDE_MODEL.to_string())
         };
 

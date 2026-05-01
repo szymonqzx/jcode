@@ -216,6 +216,16 @@ pub fn apply_named_provider_profile_env_from_config(
         );
     };
 
+    // Windsurf provider uses auto-discovery, no env variables needed
+    if matches!(profile.provider_type, crate::config::NamedProviderType::Windsurf) {
+        crate::env::remove_var("JCODE_PROVIDER_PROFILE_ACTIVE");
+        crate::env::remove_var("JCODE_PROVIDER_PROFILE_NAME");
+        crate::env::remove_var("JCODE_NAMED_PROVIDER_PROFILE");
+        apply_openai_compatible_profile_env(None);
+        crate::env::set_var("JCODE_NAMED_PROVIDER_PROFILE", profile_name);
+        return Ok(profile_name.to_string());
+    }
+
     let api_base = normalize_api_base(&profile.base_url).ok_or_else(|| {
         anyhow::anyhow!(
             "Provider profile '{}' has invalid base_url '{}'. Use https://... or http://localhost.",
@@ -480,6 +490,7 @@ pub fn load_api_key_from_env_or_config(env_key: &str, file_name: &str) -> Option
     }
 
     let config_path = crate::storage::app_config_dir().ok()?.join(file_name);
+    // Harden permissions before reading to ensure secure access
     crate::storage::harden_secret_file_permissions(&config_path);
     let content = std::fs::read_to_string(config_path).ok()?;
     let prefix = format!("{}=", env_key);
@@ -493,6 +504,7 @@ pub fn load_api_key_from_env_or_config(env_key: &str, file_name: &str) -> Option
         }
     }
 
+    // ZHIPU_API_KEY has a legacy fallback to ZAI_API_KEY for backward compatibility
     if env_key == "ZHIPU_API_KEY" {
         if let Ok(key) = std::env::var("ZAI_API_KEY") {
             let key = key.trim();
@@ -543,6 +555,7 @@ pub fn load_env_value_from_env_or_config(env_key: &str, file_name: &str) -> Opti
     }
 
     let config_path = crate::storage::app_config_dir().ok()?.join(file_name);
+    // Harden permissions before reading to ensure secure access
     crate::storage::harden_secret_file_permissions(&config_path);
     let content = std::fs::read_to_string(config_path).ok()?;
     let prefix = format!("{}=", env_key);

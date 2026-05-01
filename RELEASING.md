@@ -185,6 +185,23 @@ rustflags = ["-C", "link-arg=-fuse-ld=lld"]
 ```
 lld is included with Xcode toolchain
 
+### Cross-Project Caching
+
+**Shared Target Directory (recommended over sccache):**
+```toml
+# In .cargo/config.toml
+[build]
+target-dir = "$HOME/.cargo/cache/target"
+```
+This provides cross-project dependency caching without sccache's complexity.
+
+**sccache (alternative):**
+```bash
+cargo install sccache
+export RUSTC_WRAPPER=sccache  # Linux/macOS
+$env:RUSTC_WRAPPER="sccache"  # Windows PowerShell
+```
+
 ### Development Build Optimizations
 
 The `[profile.dev]` is configured for faster iteration:
@@ -210,24 +227,59 @@ cargo build --release --features "jemalloc"
 
 The `embeddings` feature (163 crates) is particularly slow to compile.
 
-**2. Use sccache for dependency caching:**
-```bash
-cargo install sccache
-export RUSTC_WRAPPER=sccache  # Linux/macOS
-$env:RUSTC_WRAPPER="sccache"  # Windows PowerShell
-```
-
-**3. Increase job parallelism:**
+**2. Increase job parallelism:**
 ```bash
 export CARGO_BUILD_JOBS=8  # Linux/macOS
 $env:CARGO_BUILD_JOBS="8"  # Windows PowerShell
 ```
 
-**4. Windows Defender exclusions (Windows only):**
+**3. Windows Defender exclusions (Windows only):**
 Add exclusions for:
 - `target/` directory
 - `C:\Users\<username>\.cargo\registry\`
 - `C:\Users\<username>\.cargo\git\`
 
-**5. build.rs optimization:**
+**4. build.rs optimization:**
 The `build.rs` file is configured with explicit `rerun-if-changed` directives to prevent unnecessary rebuilds when only timestamps change.
+
+**5. CI-specific optimizations:**
+```bash
+# Disable incremental compilation in CI
+export CARGO_INCREMENTAL=0
+
+# Use CI-optimized profile
+cargo build --profile ci
+```
+
+The `[profile.ci]` in Cargo.toml is optimized for CI environments with no incremental compilation, thin LTO, and single codegen unit.
+
+**6. Analyze unused dependencies:**
+```bash
+cargo install cargo-machete
+cargo machete
+```
+
+**7. Profile build bottlenecks:**
+```bash
+cargo build --timings
+```
+Generates an HTML report showing compilation metrics per crate.
+
+**8. Analyze macro expansion:**
+```bash
+cargo install cargo-expand
+cargo expand
+```
+Helps identify macros generating excessive code.
+
+**9. Nightly-only optimizations (experimental):**
+```bash
+# Parallel front-end
+RUSTFLAGS="-Zthreads=8" cargo +nightly build
+
+# Cranelift backend (faster compilation, lower quality code)
+RUSTFLAGS="-Zcodegen-backend=cranelift" cargo +nightly build
+
+# Share generics across crates
+RUSTFLAGS="-Zshare-generics" cargo +nightly build
+```
