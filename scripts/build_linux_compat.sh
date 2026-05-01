@@ -56,7 +56,8 @@ docker run --rm \
       curl \
       git \
       libssl-dev \
-      pkg-config
+      pkg-config \
+      mold
 
     if [[ ! -x /root/.cargo/bin/cargo ]]; then
       curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain stable

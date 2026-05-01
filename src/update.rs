@@ -7,7 +7,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
-const GITHUB_REPO: &str = "1jehuang/jcode";
+const GITHUB_REPO: &str = "szymonqzx/jcode";
 const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(60); // minimum gap between checks
 const UPDATE_CHECK_TIMEOUT: Duration = Duration::from_secs(5);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(120);

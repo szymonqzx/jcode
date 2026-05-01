@@ -113,7 +113,6 @@ mod tests {
     }
 
     #[test]
-    fn schema_only_advertises_todos_and_intent() {
     fn schema_advertises_intent_and_todos() {
         let schema = TodoTool::new().parameters_schema();
         let props = schema
@@ -126,8 +125,5 @@ mod tests {
         assert!(props.contains_key("todos"), "{props:?}");
         assert!(props.contains_key("intent"), "{props:?}");
         assert_eq!(props.len(), 2, "{props:?}");
-        assert_eq!(props.len(), 2);
-        assert!(props.contains_key("intent"));
-        assert!(props.contains_key("todos"));
     }
 }

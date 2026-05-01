@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="1jehuang/jcode"
+REPO="szymonqzx/jcode"
 IS_WINDOWS=false
 
 info() { printf '\033[1;34m%s\033[0m\n' "$*"; }

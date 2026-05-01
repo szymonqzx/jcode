@@ -123,7 +123,8 @@ fn main() {
         println!("cargo:rustc-env=JCODE_RELEASE_BUILD=1");
     }
 
-    // Re-run if git HEAD changes
+    // Re-run only if these specific files change (prevents timestamp-based rebuilds)
+    println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=.git/HEAD");
     println!("cargo:rerun-if-changed=.git/index");
     println!("cargo:rerun-if-changed=Cargo.toml");

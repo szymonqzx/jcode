@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 
 const MAX_INTERACTIVE_SWARM_REPLAY_PANES: usize = 16;
 use std::io::{self, Write};
+use std::process::{Command, Stdio};
 use std::process::Command as ProcessCommand;
 use std::sync::Arc;
 
@@ -899,10 +900,6 @@ pub fn list_sessions() -> Result<()> {
                 format!("◌ OpenCode {}", &session_id[..session_id.len().min(8)])
             }
         };
-<<<<<<< HEAD
-        let command = crate::terminal_launch::TerminalCommand::new(program, args).title(title);
-        crate::terminal_launch::spawn_command_in_new_terminal(&command, cwd)
-=======
 
         #[cfg(unix)]
         let resume_terminal_candidates = resume_terminal_candidates_unix();
@@ -989,7 +986,6 @@ pub fn list_sessions() -> Result<()> {
         }
 
         Ok(false)
->>>>>>> 8ee36636613936d242d119e6554c9771599afd78
     }
 
     match tui::session_picker::pick_session()? {

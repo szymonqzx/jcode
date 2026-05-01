@@ -60,7 +60,7 @@ Tag push (v*)
     │
     ├─► release (after Linux + macOS complete)
     │     ├─► Create GitHub Release with binaries
-    │     ├─► Update Homebrew formula (1jehuang/homebrew-jcode)
+    │     ├─► Update Homebrew formula (szymonqzx/homebrew-jcode)
     │     └─► Update AUR package (jcode-bin)
     │
     └─► upload-windows-assets (after Windows + release complete)
@@ -78,7 +78,7 @@ Key design decisions:
 
 CI handles Homebrew and AUR updates automatically:
 
-- **Homebrew**: Updates `Formula/jcode.rb` in `1jehuang/homebrew-jcode` with new SHA256 hashes
+- **Homebrew**: Updates `Formula/jcode.rb` in `szymonqzx/homebrew-jcode` with new SHA256 hashes
 - **AUR**: Updates `PKGBUILD` and `.SRCINFO` in the `jcode-bin` AUR repo
 
 Both are triggered by the `release` job after Linux + macOS builds complete.
@@ -157,3 +157,77 @@ The bottleneck is compiling jcode itself (120k lines of Rust). Dependencies are 
 - 8 cores is the hardware limit
 - Splitting into workspace crates would allow partial recompilation (~1 min for small changes)
 - A 20+ core machine on LAN (not Tailscale) would cut build time to ~40-50s
+
+## Build Optimizations
+
+### Platform-Specific Linkers
+
+For faster builds, configure platform-specific linkers in `.cargo/config.toml`:
+
+**Windows (MSVC):**
+```toml
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+```
+Install LLVM via: `winget install LLVM.LLVM`
+
+**Linux:**
+```toml
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+```
+Install mold via: `sudo apt install mold` (Ubuntu) or equivalent
+
+**macOS:**
+```toml
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+```
+lld is included with Xcode toolchain
+
+### Development Build Optimizations
+
+The `[profile.dev]` is configured for faster iteration:
+
+```toml
+[profile.dev]
+debug = 0
+opt-level = 1
+incremental = true
+codegen-units = 256
+```
+
+This trades some runtime performance for faster compilation during development.
+
+### Additional Optimization Techniques
+
+**1. Disable heavy features during development:**
+```bash
+cargo build --release --no-default-features
+# or selectively:
+cargo build --release --features "jemalloc"
+```
+
+The `embeddings` feature (163 crates) is particularly slow to compile.
+
+**2. Use sccache for dependency caching:**
+```bash
+cargo install sccache
+export RUSTC_WRAPPER=sccache  # Linux/macOS
+$env:RUSTC_WRAPPER="sccache"  # Windows PowerShell
+```
+
+**3. Increase job parallelism:**
+```bash
+export CARGO_BUILD_JOBS=8  # Linux/macOS
+$env:CARGO_BUILD_JOBS="8"  # Windows PowerShell
+```
+
+**4. Windows Defender exclusions (Windows only):**
+Add exclusions for:
+- `target/` directory
+- `C:\Users\<username>\.cargo\registry\`
+- `C:\Users\<username>\.cargo\git\`
+
+**5. build.rs optimization:**
+The `build.rs` file is configured with explicit `rerun-if-changed` directives to prevent unnecessary rebuilds when only timestamps change.

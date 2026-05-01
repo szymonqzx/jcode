@@ -2,19 +2,19 @@
 
 # jcode
 
-[![Latest Release](https://img.shields.io/github/v/release/1jehuang/jcode?style=flat-square)](https://github.com/1jehuang/jcode/releases)
-[![License](https://img.shields.io/github/license/1jehuang/jcode?style=flat-square)](LICENSE)
-[![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-blue?style=flat-square)](https://github.com/1jehuang/jcode/releases)
-[![Commit Activity](https://img.shields.io/github/commit-activity/m/1jehuang/jcode?style=flat-square)](https://github.com/1jehuang/jcode/commits/master)
-[![GitHub Stars](https://img.shields.io/github/stars/1jehuang/jcode?style=flat-square)](https://github.com/1jehuang/jcode/stargazers)
+[![Latest Release](https://img.shields.io/github/v/release/szymonqzx/jcode?style=flat-square)](https://github.com/szymonqzx/jcode/releases)
+[![License](https://img.shields.io/github/license/szymonqzx/jcode?style=flat-square)](LICENSE)
+[![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-blue?style=flat-square)](https://github.com/szymonqzx/jcode/releases)
+[![Commit Activity](https://img.shields.io/github/commit-activity/m/szymonqzx/jcode?style=flat-square)](https://github.com/szymonqzx/jcode/commits/master)
+[![GitHub Stars](https://img.shields.io/github/stars/szymonqzx/jcode?style=flat-square)](https://github.com/szymonqzx/jcode/stargazers)
 
 The next generation coding agent harness to raise the skill ceiling. <br>
-Built for multi-session workflows, infinite customizability, and performance. 
+Built for multi-session workflows, infinite customizability, and performance.
 
 <br>
 
-<a href="https://github.com/1jehuang/jcode/releases/download/readme-assets/jcode-memory-demo.mp4">
-  <img src="https://github.com/1jehuang/jcode/releases/download/readme-assets/jcode-memory-demo.webp" alt="jcode memory demonstration" width="800">
+<a href="https://github.com/szymonqzx/jcode/releases/download/readme-assets/jcode-memory-demo.mp4">
+  <img src="https://github.com/szymonqzx/jcode/releases/download/readme-assets/jcode-memory-demo.webp" alt="jcode memory demonstration" width="800">
 </a>
 
 <br>
@@ -33,7 +33,7 @@ Built for multi-session workflows, infinite customizability, and performance.
 
 ```bash
 # macOS & Linux
-curl -fsSL https://raw.githubusercontent.com/1jehuang/jcode/master/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/szymonqzx/jcode/master/scripts/install.sh | bash
 ```
 
 Need Windows, Homebrew, source builds, provider setup, or tell your agent to set it up for you?
@@ -234,8 +234,8 @@ versions tested for this corrected memory rerun:
 
 <div align="center">
 
-  <a href="https://github.com/1jehuang/jcode/releases/download/readme-assets/jcode-performance-demo.mp4">
-    <img src="https://github.com/1jehuang/jcode/releases/download/readme-assets/jcode-performance-demo.webp" alt="jcode performance demonstration" width="900">
+  <a href="https://github.com/szymonqzx/jcode/releases/download/readme-assets/jcode-performance-demo.mp4">
+    <img src="https://github.com/szymonqzx/jcode/releases/download/readme-assets/jcode-performance-demo.webp" alt="jcode performance demonstration" width="900">
   </a>
 
   <p><em>jcode performance demonstration</em></p>
@@ -247,18 +247,18 @@ versions tested for this corrected memory rerun:
 
 ## Memory (Agent memory)
 
-Jcode embeds each turn/response as a semantic vector. Every turn does queries a graph of memories to efficiently find related memory entries via a cosine similarity check. The embedding hits are fed into the conversation, or optionally uses a memory sideagent which verifies the memories are relevant, and potentially does more work for information retreival before injecting into the conversation. This results in a human like memory system which allows the agent to automatically recall relevant information to the conversation without actively calling memory tools or being a token burner. 
-ot 
-To have memories which are retrieved, they must also be extracted and stored. Every so often (semantic drift, K turns since last extraction, session end, etc), memories are extracted via a memory sideagent, and put into the memory graph. 
+Jcode embeds each turn/response as a semantic vector. Every turn does queries a graph of memories to efficiently find related memory entries via a cosine similarity check. The embedding hits are fed into the conversation, or optionally uses a memory sideagent which verifies the memories are relevant, and potentially does more work for information retreival before injecting into the conversation. This results in a human like memory system which allows the agent to automatically recall relevant information to the conversation without actively calling memory tools or being a token burner.
+ot
+To have memories which are retrieved, they must also be extracted and stored. Every so often (semantic drift, K turns since last extraction, session end, etc), memories are extracted via a memory sideagent, and put into the memory graph.
 
-The harness also provides explicit memory tools to allow the agent to actively search or store the memory without relying on a passive background process. The harness also provides session search for traditional RAG on previous sessions. 
+The harness also provides explicit memory tools to allow the agent to actively search or store the memory without relying on a passive background process. The harness also provides session search for traditional RAG on previous sessions.
 
 Memories are automatically consolidated every so often via the ambient mode. This reorganizes, checks for staleness and conflicts, etc
 
 <div align="center">
 
-  <a href="https://github.com/1jehuang/jcode/releases/download/readme-assets/jcode-memory-demo.mp4">
-    <img src="https://github.com/1jehuang/jcode/releases/download/readme-assets/jcode-memory-demo.webp" alt="jcode memory demonstration" width="900">
+  <a href="https://github.com/szymonqzx/jcode/releases/download/readme-assets/jcode-memory-demo.mp4">
+    <img src="https://github.com/szymonqzx/jcode/releases/download/readme-assets/jcode-memory-demo.webp" alt="jcode memory demonstration" width="900">
   </a>
 
   <p><em>jcode memory demonstration</em></p>
@@ -271,14 +271,14 @@ Memories are automatically consolidated every so often via the ambient mode. Thi
 
 ## UI: Side panels, Diagrams, Info Widgets, rendering, scrolling, alignment
 
-The side panel is a place for auxiliary information. Tell your jcode agent to load a file into the side panel and see it update in real time, or tell your agent to write directly to the side panel, or use it as a diff viewer. The side panel (and chat) is able to render mermaid diagrams inline. 
+The side panel is a place for auxiliary information. Tell your jcode agent to load a file into the side panel and see it update in real time, or tell your agent to write directly to the side panel, or use it as a diff viewer. The side panel (and chat) is able to render mermaid diagrams inline.
 <img width="2877" height="1762" alt="image" src="https://github.com/user-attachments/assets/6c7bec81-ef3f-434d-8a7b-d55f8a54e5cf" />
 
 To make this possible, I created a new mermaid rendering library to render diagrams 1800x faster. It has no browser or Typescript dependency. See https://github.com/1jehuang/mermaid-rs-renderer
 
-To show you important information without taking space away from the screen that could be used for responses, I developed info widgets. Info widgets will only ever take up the negative space on the screen to show you information, and will get out of the way if there isn't any. 
+To show you important information without taking space away from the screen that could be used for responses, I developed info widgets. Info widgets will only ever take up the negative space on the screen to show you information, and will get out of the way if there isn't any.
 
-Jcode can render at over a thousand fps. Your monitor will not have the refresh rate to show you, but this means you will not have silly flicker problems. 
+Jcode can render at over a thousand fps. Your monitor will not have the refresh rate to show you, but this means you will not have silly flicker problems.
 
 The custom scrollback implementation of jcode allows it to do much more than a native scrollback. However, it is a terminal-level limitation that I cannot have smooth, partial line scrolling with a custom scrollback. To fix this, I made my own terminal. Handterm https://github.com/1jehuang/handterm implements a native scroll api, and also happens to be very effiecent. This is a work in progress. Scrolling is still well implemented for normal terminals.
 
@@ -292,8 +292,8 @@ Spawn two or more agents in the same repo, and they will automatically be manage
 
 <div align="center">
 
-  <a href="https://github.com/1jehuang/jcode/releases/download/readme-assets/swarm-demo.mp4">
-    <img src="https://github.com/1jehuang/jcode/releases/download/readme-assets/jcode-swarm-demonstration.webp" alt="jcode swarm demonstration" width="900">
+  <a href="https://github.com/szymonqzx/jcode/releases/download/readme-assets/swarm-demo.mp4">
+    <img src="https://github.com/szymonqzx/jcode/releases/download/readme-assets/jcode-swarm-demonstration.webp" alt="jcode swarm demonstration" width="900">
   </a>
 
   <p><em>jcode swarm demonstration</em></p>
@@ -424,13 +424,13 @@ The above image is the first page of provider logins
 - **Aggregator / compatibility providers:** `openrouter`, `openai-compatible`
 - **Additional provider integrations:** `opencode`, `opencode-go`, `zai` / `kimi`, `302ai`, `baseten`, `cortecs`, `deepseek`, `firmware`, `huggingface`, `moonshotai`, `nebius`, `scaleway`, `stackit`, `groq`, `mistral`, `perplexity`, `togetherai`, `deepinfra`, `fireworks`, `minimax`, `xai`, `lmstudio`, `ollama`, `chutes`, `cerebras`, `cursor`, `antigravity`, `google`
 
-Jcode also supports easy multi-account switching. Ran out of tokens on your first ChatGPT Pro subscription? /account and quickly switch to your second. 
+Jcode also supports easy multi-account switching. Ran out of tokens on your first ChatGPT Pro subscription? /account and quickly switch to your second.
 
 ---
 
 ## Customizability / Self-Dev
 
-Jcode is inventing a new form of customizability. One that doesn't limit you to what a plugin or extension can do. Tell your jcode agent to enter self dev mode, and it will start modifying its own source code. Jcode is optimized to iterate on itself. There is significant infrastructure around self developement, which allows it to edit, build, and test its own source code, then reload its own binary and continue work in your (potentially many) sessions, fully automatically. 
+Jcode is inventing a new form of customizability. One that doesn't limit you to what a plugin or extension can do. Tell your jcode agent to enter self dev mode, and it will start modifying its own source code. Jcode is optimized to iterate on itself. There is significant infrastructure around self developement, which allows it to edit, build, and test its own source code, then reload its own binary and continue work in your (potentially many) sessions, fully automatically.
 
 It is reccomended that you use a frontier model for this. The jcode codebase is not a simple one, and weaker models can make subtle, breaking changes. GPT 5.5 or the latest available frontier model works well.
 
@@ -440,37 +440,37 @@ It is reccomended that you use a frontier model for this. The jcode codebase is 
 
 ## Misc.
 
-The devil is in the details. There are many undocumented optimizations and niceties that jcode implements. Some examples: 
+The devil is in the details. There are many undocumented optimizations and niceties that jcode implements. Some examples:
 
-Anthropic's Claude cache goes cold after 5 minutes. If you initiate Claude after these 5 minutes, you have a cache miss, potentially costing you lots of tokens. The ui warns you when the cache went cold, and notfies you if there was an unexpected cache miss. 
+Anthropic's Claude cache goes cold after 5 minutes. If you initiate Claude after these 5 minutes, you have a cache miss, potentially costing you lots of tokens. The ui warns you when the cache went cold, and notfies you if there was an unexpected cache miss.
 
-jcode comes with instructions on how to set up Firefox Agent Bridge. Ask you agent to set it up, and then you will have browser automation in jcode as well. 
+jcode comes with instructions on how to set up Firefox Agent Bridge. Ask you agent to set it up, and then you will have browser automation in jcode as well.
 
-Agent grep is a grep tool I made for the jcode agent. It adds file strucuture information (ie the list of functions, their displacement, etc) to the grep return, so that the agent can infer more of what the file doesn without actually reading the file. It also implements a harness-level integration that adaptively truncates returns based on what the agent has already seen. This saves on context a lot. 
+Agent grep is a grep tool I made for the jcode agent. It adds file strucuture information (ie the list of functions, their displacement, etc) to the grep return, so that the agent can infer more of what the file doesn without actually reading the file. It also implements a harness-level integration that adaptively truncates returns based on what the agent has already seen. This saves on context a lot.
 
 Inputs are by default interleaved with the working agent. It sends the input as soon as it safely can without breaking the KV cache. Submit with shift enter instead, and it will send a queue send, and wait for the agent to fully finish its turn before sending.
 
-Resume sessions from different harnesses. Claude code broke on you? Resume the session from jcode and continue where you left off. Session resume is supported for codex, claude code, opencode, and pi. 
+Resume sessions from different harnesses. Claude code broke on you? Resume the session from jcode and continue where you left off. Session resume is supported for codex, claude code, opencode, and pi.
 
 <img width="2877" height="1762" alt="Screenshot from 2026-04-11 16-28-52" src="https://github.com/user-attachments/assets/c2b383cf-2531-4217-85ae-6a863354dc97" />
 image of /Resume for codex sessions
 
 
-Skills are not all loaded on startup. The conversation is embedded as a semantic vector, and will automatically inject a skill if there is an embedding hit similar to memories. The agent has a skill tool for you to manually activate a skill at anytime. You may also activate via slash commands. 
+Skills are not all loaded on startup. The conversation is embedded as a semantic vector, and will automatically inject a skill if there is an embedding hit similar to memories. The agent has a skill tool for you to manually activate a skill at anytime. You may also activate via slash commands.
 
 ---
 
 ## iOS Application / Native OpenClaw
 
-A native iOS application version of jcode is coming soon. This will allow you to work with jcode on your personal machine's environment from your phone, via Tailscale. Openclaw like features will be bundled with this iOS application. 
+A native iOS application version of jcode is coming soon. This will allow you to work with jcode on your personal machine's environment from your phone, via Tailscale. Openclaw like features will be bundled with this iOS application.
 
 ---
 
 ## Other planned features
 
-Agents dont like to commit in dirty git state with active changes. Git was clearly not built for multi-agent workflows, and git worktrees is not a good solution. Given this, I believe that is an opporunity for a new git like primitive to be born. 
+Agents dont like to commit in dirty git state with active changes. Git was clearly not built for multi-agent workflows, and git worktrees is not a good solution. Given this, I believe that is an opporunity for a new git like primitive to be born.
 
-Build speed improvements: An incremental debug cargo build with cache enabled takes about 1 minute on my machine. The goal is 5-20 seconds. Refactors and crates seams should be able to make this happen. 
+Build speed improvements: An incremental debug cargo build with cache enabled takes about 1 minute on my machine. The goal is 5-20 seconds. Refactors and crates seams should be able to make this happen.
 
 <!-- Add iOS / native OpenClaw preview and fuller writeup here. -->
 
@@ -505,8 +505,8 @@ and hotkey-friendly dictation without requiring a bundled speech-to-text stack.
 
 <div align="center">
 
-  <a href="https://github.com/1jehuang/jcode/releases/download/readme-assets/workflow.mp4">
-    <img src="https://github.com/1jehuang/jcode/releases/download/readme-assets/jcode-workflow-demonstration.webp" alt="jcode workflow demonstration" width="900">
+  <a href="https://github.com/szymonqzx/jcode/releases/download/readme-assets/workflow.mp4">
+    <img src="https://github.com/szymonqzx/jcode/releases/download/readme-assets/jcode-workflow-demonstration.webp" alt="jcode workflow demonstration" width="900">
   </a>
 
   <p><em>jcode workflow demonstration</em></p>
@@ -584,17 +584,17 @@ Set up jcode on this machine for me.
 1. Detect the operating system, available package managers, and shell environment, then install jcode using the best matching command below instead of referring me somewhere else:
 
    - macOS with Homebrew available:
-     brew tap 1jehuang/jcode
+     brew tap szymonqzx/jcode
      brew install jcode
 
    - macOS or Linux via install script:
-     curl -fsSL https://raw.githubusercontent.com/1jehuang/jcode/master/scripts/install.sh | bash
+     curl -fsSL https://raw.githubusercontent.com/szymonqzx/jcode/master/scripts/install.sh | bash
 
    - Windows PowerShell:
-     irm https://raw.githubusercontent.com/1jehuang/jcode/master/scripts/install.ps1 | iex
+     irm https://raw.githubusercontent.com/szymonqzx/jcode/master/scripts/install.ps1 | iex
 
    - From source if the above paths are not appropriate:
-     git clone https://github.com/1jehuang/jcode.git
+     git clone https://github.com/szymonqzx/jcode.git
      cd jcode
      cargo build --release
      scripts/install_release.sh
@@ -639,25 +639,25 @@ This is intended to be a copy-paste bootstrap prompt for jcode itself or any oth
 
 ```bash
 # macOS & Linux
-curl -fsSL https://raw.githubusercontent.com/1jehuang/jcode/master/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/szymonqzx/jcode/master/scripts/install.sh | bash
 ```
 
 ```powershell
 # Windows (PowerShell)
-irm https://raw.githubusercontent.com/1jehuang/jcode/master/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/szymonqzx/jcode/master/scripts/install.ps1 | iex
 ```
 
 ### macOS via Homebrew
 
 ```bash
-brew tap 1jehuang/jcode
+brew tap szymonqzx/jcode
 brew install jcode
 ```
 
 ### From Source (all platforms)
 
 ```bash
-git clone https://github.com/1jehuang/jcode.git
+git clone https://github.com/szymonqzx/jcode.git
 cd jcode
 cargo build --release
 ```
