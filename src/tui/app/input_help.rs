@@ -17,7 +17,7 @@ impl App {
                 "`/fix`\nRun recovery actions when the model cannot continue.\nRepairs missing tool outputs, resets provider session state, and starts compaction when possible."
             }
             "rewind" => {
-                "`/rewind`\nShow numbered conversation history.\n\n`/rewind N`\nRewind to message N (drops everything after it and resets provider session)."
+                "`/rewind`\nShow numbered conversation history.\n\n`/rewind N`\nRewind to message N (drops everything after it and resets provider session).\n\n`/rewind undo`\nUndo the most recent rewind and restore the removed messages."
             }
             "clear" => {
                 "`/clear`\nClear current conversation, queue, and display; starts a fresh session."
@@ -81,6 +81,9 @@ impl App {
                 "`/goals`\nOpen the goals overview in the side panel.\n\n`/goals resume`\nResume the most relevant active goal for this session/project.\n\n`/goals show <id>`\nOpen a specific goal in the side panel."
             }
             "swarm" => "`/swarm [on|off|status]`\nToggle swarm features for this session.",
+            "overnight" => {
+                "`/overnight <hours>[h|m] [mission]`\nStart one overnight coordinator with a target wake/report time. The coordinator prioritizes verifiable, low-risk work, maintains structured logs, updates review notes, and generates a review HTML page.\n\n`/overnight status`\nShow the latest overnight run status.\n\n`/overnight log`\nShow recent overnight events.\n\n`/overnight review`\nOpen the generated review page.\n\n`/overnight cancel`\nRequest cancellation after the current coordinator turn reaches a safe boundary."
+            }
             "dictate" | "dictation" => {
                 "`/dictate`\nRun the configured external speech-to-text command and inject the transcript into jcode.\n\nConfigure `[dictation]` in `~/.jcode/config.toml`:\n- `command`: shell command that prints transcript to stdout, for example `~/.local/bin/my-whisper-script --grammar-target code`\n- `mode`: `insert|append|replace|send`\n- `key`: optional hotkey (for example `alt+;`)\n- `timeout_secs`: max wait time"
             }

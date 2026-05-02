@@ -153,6 +153,59 @@ impl Agent {
         self.persist_session_best_effort("provider session reset");
     }
 
+    /// Rewind the conversation to a 1-based visible conversation message index.
+    ///
+    /// Provider-side resumable sessions are reset so the next request sends the
+    /// truncated context from scratch instead of continuing from a stale upstream
+    /// conversation.
+    pub fn rewind_to_message(&mut self, message_index: usize) -> Result<usize, String> {
+        let message_count = self.session.visible_conversation_message_count();
+        let Some(stored_len) = self
+            .session
+            .stored_len_for_visible_conversation_message(message_index)
+        else {
+            return Err(format!(
+                "Invalid message number: {}. Valid range: 1-{}",
+                message_index, message_count
+            ));
+        };
+
+        let removed = message_count - message_index;
+        self.rewind_undo_snapshot = Some(RewindUndoSnapshot {
+            messages: self.session.messages.clone(),
+            provider_session_id: self.provider_session_id.clone(),
+            session_provider_session_id: self.session.provider_session_id.clone(),
+            visible_message_count: message_count,
+        });
+        self.session.truncate_messages(stored_len);
+        self.session.updated_at = chrono::Utc::now();
+        self.provider_session_id = None;
+        self.session.provider_session_id = None;
+        self.cache_tracker.reset();
+        self.locked_tools = None;
+        self.reset_tool_output_tracking();
+        self.persist_session_best_effort("conversation rewind");
+        Ok(removed)
+    }
+
+    pub fn undo_rewind(&mut self) -> Result<usize, String> {
+        let Some(snapshot) = self.rewind_undo_snapshot.take() else {
+            return Err("No rewind to undo.".to_string());
+        };
+
+        let current_count = self.session.visible_conversation_message_count();
+        let restored = snapshot.visible_message_count.saturating_sub(current_count);
+        self.session.replace_messages(snapshot.messages);
+        self.provider_session_id = snapshot.provider_session_id;
+        self.session.provider_session_id = snapshot.session_provider_session_id;
+        self.session.updated_at = chrono::Utc::now();
+        self.cache_tracker.reset();
+        self.locked_tools = None;
+        self.reset_tool_output_tracking();
+        self.persist_session_best_effort("conversation rewind undo");
+        Ok(restored)
+    }
+
     /// Unlock the tool list so the next API request picks up any new tools.
     /// Called after MCP reload or when the user explicitly wants new tools.
     pub fn unlock_tools(&mut self) {

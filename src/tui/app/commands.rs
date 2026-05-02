@@ -19,7 +19,7 @@ pub(super) use super::commands_review::{
     reset_current_session,
 };
 pub(super) use super::todos_view::handle_todos_view_command;
-use super::{App, DisplayMessage, ProcessingStatus};
+use super::{App, DisplayMessage, LocalRewindUndoSnapshot, ProcessingStatus};
 use crate::bus::{Bus, BusEvent, GitStatusCompleted, ManualToolCompleted, ToolEvent, ToolStatus};
 use crate::id;
 use crate::message::{ContentBlock, Message, Role};
@@ -1081,6 +1081,7 @@ pub(super) fn handle_session_command(app: &mut App, trimmed: &str) -> bool {
         || handle_subagent_command(app, trimmed)
         || handle_observe_command(app, trimmed)
         || handle_todos_view_command(app, trimmed)
+        || super::commands_overnight::handle_overnight_command(app, trimmed)
         || super::split_view::handle_split_view_command(app, trimmed)
         || handle_btw_command(app, trimmed)
         || handle_transcript_command(app, trimmed)
@@ -1270,8 +1271,45 @@ pub(super) fn handle_session_command(app: &mut App, trimmed: &str) -> bool {
         return true;
     }
 
+    if trimmed == "/rewind undo" {
+        let Some(snapshot) = app.rewind_undo_snapshot.take() else {
+            app.push_display_message(DisplayMessage::system("No rewind to undo.".to_string()));
+            return true;
+        };
+
+        let current_count = app.session.visible_conversation_message_count();
+        let restored = snapshot.visible_message_count.saturating_sub(current_count);
+        app.session.replace_messages(snapshot.messages);
+        app.provider_session_id = snapshot.provider_session_id;
+        app.session.provider_session_id = snapshot.session_provider_session_id;
+        app.session.updated_at = chrono::Utc::now();
+        let provider_messages = app.session.messages_for_provider_uncached();
+        app.replace_provider_messages(provider_messages);
+
+        app.clear_display_messages();
+        for rendered in crate::session::render_messages(&app.session) {
+            app.push_display_message(DisplayMessage {
+                role: rendered.role,
+                content: rendered.content,
+                tool_calls: rendered.tool_calls,
+                duration_secs: None,
+                title: None,
+                tool_data: rendered.tool_data,
+            });
+        }
+
+        let _ = app.session.save();
+        app.push_display_message(DisplayMessage::system(format!(
+            "✓ Undid rewind. Restored {} message{}.",
+            restored,
+            if restored == 1 { "" } else { "s" }
+        )));
+        return true;
+    }
+
     if trimmed == "/rewind" {
-        if app.session.messages.is_empty() {
+        let visible_messages = app.session.visible_conversation_messages();
+        if visible_messages.is_empty() {
             app.push_display_message(DisplayMessage::system(
                 "No messages in conversation.".to_string(),
             ));
@@ -1279,7 +1317,7 @@ pub(super) fn handle_session_command(app: &mut App, trimmed: &str) -> bool {
         }
 
         let mut history = String::from("**Conversation history:**\n\n");
-        for (i, msg) in app.session.messages.iter().enumerate() {
+        for (i, msg) in visible_messages.iter().enumerate() {
             let role_str = match msg.role {
                 Role::User => "👤 User",
                 Role::Assistant => "🤖 Assistant",
@@ -1288,7 +1326,7 @@ pub(super) fn handle_session_command(app: &mut App, trimmed: &str) -> bool {
             let preview = crate::util::truncate_str(&content, 80);
             history.push_str(&format!("  `{}` {} - {}\n", i + 1, role_str, preview));
         }
-        history.push_str("\nUse `/rewind N` to rewind to message N (removes all messages after).");
+        history.push_str("\nUse `/rewind N` to rewind to message N (removes all messages after). After rewinding, use `/rewind undo` to restore the removed messages.");
 
         app.push_display_message(DisplayMessage::system(history));
         return true;
@@ -1296,10 +1334,20 @@ pub(super) fn handle_session_command(app: &mut App, trimmed: &str) -> bool {
 
     if let Some(num_str) = trimmed.strip_prefix("/rewind ") {
         let num_str = num_str.trim();
+        let visible_count = app.session.visible_conversation_message_count();
         match num_str.parse::<usize>() {
-            Ok(n) if n > 0 && n <= app.session.messages.len() => {
-                let removed = app.session.messages.len() - n;
-                app.session.truncate_messages(n);
+            Ok(n) if n > 0 && n <= visible_count => {
+                let removed = visible_count - n;
+                app.rewind_undo_snapshot = Some(LocalRewindUndoSnapshot {
+                    messages: app.session.messages.clone(),
+                    provider_session_id: app.provider_session_id.clone(),
+                    session_provider_session_id: app.session.provider_session_id.clone(),
+                    visible_message_count: visible_count,
+                });
+                if let Some(stored_len) = app.session.stored_len_for_visible_conversation_message(n)
+                {
+                    app.session.truncate_messages(stored_len);
+                }
                 let provider_messages = app.session.messages_for_provider_uncached();
                 app.replace_provider_messages(provider_messages);
                 app.session.updated_at = chrono::Utc::now();
@@ -1321,7 +1369,7 @@ pub(super) fn handle_session_command(app: &mut App, trimmed: &str) -> bool {
                 let _ = app.session.save();
 
                 app.push_display_message(DisplayMessage::system(format!(
-                    "✓ Rewound to message {}. Removed {} message{}.",
+                    "✓ Rewound to message {}. Removed {} message{}. Undo anytime with `/rewind undo`.",
                     n,
                     removed,
                     if removed == 1 { "" } else { "s" }
@@ -1330,14 +1378,13 @@ pub(super) fn handle_session_command(app: &mut App, trimmed: &str) -> bool {
             Ok(n) => {
                 app.push_display_message(DisplayMessage::error(format!(
                     "Invalid message number: {}. Valid range: 1-{}",
-                    n,
-                    app.session.messages.len()
+                    n, visible_count
                 )));
             }
             Err(_) => {
                 app.push_display_message(DisplayMessage::error(format!(
                     "Usage: `/rewind N` where N is a message number (1-{})",
-                    app.session.messages.len()
+                    visible_count
                 )));
             }
         }

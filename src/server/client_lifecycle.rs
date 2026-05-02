@@ -1391,6 +1391,108 @@ pub(super) async fn handle_client(
                 session_control = refresh_session_control_handle(&client_session_id, &agent).await;
             }
 
+            Request::Rewind { id, message_index } => {
+                if client_is_processing {
+                    let _ = client_event_tx.send(ServerEvent::Error {
+                        id,
+                        message: "Cannot rewind while a turn is processing.".to_string(),
+                        retry_after_secs: None,
+                    });
+                    continue;
+                }
+
+                let rewind_result = {
+                    let mut agent_guard = agent.lock().await;
+                    agent_guard.rewind_to_message(message_index)
+                };
+
+                match rewind_result {
+                    Ok(removed) => {
+                        crate::logging::info(&format!(
+                            "Rewound session {} to message {} (removed {})",
+                            client_session_id, message_index, removed
+                        ));
+                        if handle_get_history(
+                            id,
+                            &client_session_id,
+                            client_is_processing,
+                            &agent,
+                            &provider,
+                            &sessions,
+                            &client_connections,
+                            &client_count,
+                            &writer,
+                            &server_name,
+                            &server_icon,
+                            None,
+                        )
+                        .await
+                        .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(message) => {
+                        let _ = client_event_tx.send(ServerEvent::Error {
+                            id,
+                            message,
+                            retry_after_secs: None,
+                        });
+                    }
+                }
+            }
+
+            Request::RewindUndo { id } => {
+                if client_is_processing {
+                    let _ = client_event_tx.send(ServerEvent::Error {
+                        id,
+                        message: "Cannot undo rewind while a turn is processing.".to_string(),
+                        retry_after_secs: None,
+                    });
+                    continue;
+                }
+
+                let undo_result = {
+                    let mut agent_guard = agent.lock().await;
+                    agent_guard.undo_rewind()
+                };
+
+                match undo_result {
+                    Ok(restored) => {
+                        crate::logging::info(&format!(
+                            "Undid rewind for session {} (restored {})",
+                            client_session_id, restored
+                        ));
+                        if handle_get_history(
+                            id,
+                            &client_session_id,
+                            client_is_processing,
+                            &agent,
+                            &provider,
+                            &sessions,
+                            &client_connections,
+                            &client_count,
+                            &writer,
+                            &server_name,
+                            &server_icon,
+                            None,
+                        )
+                        .await
+                        .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(message) => {
+                        let _ = client_event_tx.send(ServerEvent::Error {
+                            id,
+                            message,
+                            retry_after_secs: None,
+                        });
+                    }
+                }
+            }
+
             Request::Ping { id } => {
                 let json = encode_event(&ServerEvent::Pong { id });
                 let mut w = writer.lock().await;
