@@ -2,7 +2,8 @@
 
 ## Development Workflow
 
-- **Commit as you go** - Make small, focused commits after completing each feature or fix
+- **Automatic Git Commits [P0]** - All agents MUST automatically git commit when finishing a task (see .windsurf/rules/windsurfrules.md for detailed protocol)
+- Make small, focused commits after completing each feature, fix, or refactoring
 - If the git state is not clean, or there are other agents working in the codebase in parallel, do your best to still commit your work.
 - **Push when done** - Push all commits to remote when finishing a task or session
 - **Use fast iteration by default** - Prefer `cargo check`, targeted tests, and dev builds while iterating

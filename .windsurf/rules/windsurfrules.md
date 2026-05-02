@@ -105,6 +105,33 @@ CORRECT: Read → Understand WHY → Apply PRINCIPLES → Code
 
 Before coding: What is GOAL? What PRINCIPLES apply? How does this DIFFER from generic?
 
+### Automatic Git Commits [P0]
+
+**MANDATORY:** All agents MUST automatically git commit when finishing a task.
+
+### When to Commit
+- After completing each feature, fix, or refactoring
+- After passing all relevant tests
+- Before marking a task as complete in todo list
+- After any substantial code change (>10 lines)
+
+### Commit Protocol
+1. Stage all relevant changes: `git add <files>`
+2. Commit with descriptive message: `git commit -m "<message>"`
+3. Use conventional commit format when applicable
+4. Reference related issues/PRs when available
+
+### Push Protocol
+- Push commits to remote when finishing a task or session
+- If git state is not clean or other agents are working in parallel, still commit your work
+- Use `git push` after final commit
+
+### Commit Message Guidelines
+- Be concise but descriptive (50-72 chars for subject line)
+- Explain WHAT and WHY, not HOW
+- Use imperative mood ("Add feature" not "Added feature")
+- Reference team IDs when applicable: `// TEAM_XXX: <reason>`
+
 ---
 
 ## Code Rules (When Writing Code)
