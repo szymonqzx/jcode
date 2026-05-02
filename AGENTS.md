@@ -1,37 +1,286 @@
 # Repository Guidelines
 
+**Purpose:** This document provides operational guidelines for AI agents working on the jcode codebase. It complements the global rules in `.windsurf/rules/windsurfrules.md` and project-specific workflows.
+
+**Last Updated:** 2026-05-03
+
+---
+
+## Table of Contents
+
+- [Development Workflow](#development-workflow)
+- [Project Structure](#project-structure)
+- [Testing Guidelines](#testing-guidelines)
+- [Logs and Debugging](#logs-and-debugging)
+- [Platform-Aware Scripts](#platform-aware-scripts)
+- [Install Notes](#install-notes)
+- [Related Workflows and Skills](#related-workflows-and-skills)
+
+---
+
 ## Development Workflow
 
-- **Automatic Git Commits [P0]** - All agents MUST automatically git commit when finishing a task (see .windsurf/rules/windsurfrules.md for detailed protocol)
+### Git Commit Protocol [P0]
+
+All agents MUST automatically git commit when finishing a task. See `.windsurf/rules/windsurfrules.md` for the detailed protocol.
+
+**Commit Guidelines:**
 - Make small, focused commits after completing each feature, fix, or refactoring
-- If the git state is not clean, or there are other agents working in the codebase in parallel, do your best to still commit your work.
-- **Push when done** - Push all commits to remote when finishing a task or session
-- **Use fast iteration by default** - Prefer `cargo check`, targeted tests, and dev builds while iterating
-- **Rebuild when done** - When you are done making changes, and other agents are not working on the codebase, build the source.
-- **Bump version for releases** - Update version in `Cargo.toml` when making releases. When cutting a new release, look at all the changes that happened since the last release and determine what the version bump should be ie patch or minor, etc.
+- If git state is not clean or other agents are working in parallel, still commit your work
+- Push all commits to remote when finishing a task or session
+- Use conventional commit format when applicable
+- Reference team IDs when applicable: `// TEAM_XXX: <reason>`
 
-## Logs
+**Commit Triggers:**
+- After completing each feature, fix, or refactoring
+- After passing all relevant tests
+- Before marking a task as complete in todo list
+- After any substantial code change (>30 lines OR 3+ files modified)
+- Small changes (≤30 lines and <3 files) should not be committed unless completing a task
 
-- Logs are written to `~/.jcode/logs/` (daily files like `jcode-YYYY-MM-DD.log`).
+### Build Strategy
 
-## Debug Socket
+**Fast Iteration (during development):**
+- Prefer `cargo check`, targeted tests, and dev builds while iterating
+- Use incremental builds to speed up development
+- Focus on the specific code path you're modifying
 
-- Use the debug socket for runtime level debugging.
+**Full Rebuild (when done):**
+- When you are done making changes and other agents are not working in the codebase
+- Build the full source to ensure no integration issues
+- Verify all tests pass before considering the task complete
+
+### Release Process
+
+**Version Bumping:**
+- Update version in `Cargo.toml` when making releases
+- Look at all changes since the last release to determine bump type:
+  - **Patch:** Bug fixes, minor improvements
+  - **Minor:** New features, backward-compatible changes
+  - **Major:** Breaking changes, significant rewrites
+
+**Release Checklist:**
+- All tests passing
+- Documentation updated
+- Version bumped appropriately
+- Release notes prepared
+- Tagged and pushed
+
+---
+
+## Project Structure
+
+### Directory Layout
+
+```
+jcode/
+├── .github/           # GitHub Actions workflows
+├── .windsurf/         # AI instruction files (agents, skills, workflows, rules)
+├── crates/            # Workspace crates
+├── docs/              # Project documentation
+├── scripts/           # Build and utility scripts
+├── src/               # Main source code
+├── tests/             # Integration and E2E tests
+├── Cargo.toml         # Workspace manifest
+└── AGENTS.md          # This file
+```
+
+### Key Directories
+
+**`.windsurf/`** - AI instruction ecosystem
+- `agents/` - Agent definitions and behavior rules
+- `skills/` - Domain-specific knowledge and patterns
+- `workflows/` - Structured task execution patterns
+- `rules/` - Global rules and protocols
+
+**`crates/`** - Workspace crates
+- Each crate is a separate Rust package
+- Shared functionality organized by domain
+- See `Cargo.toml` for workspace members
+
+**`scripts/`** - Build and utility scripts
+- Platform-aware (`.sh` for Unix, `.ps1` for Windows)
+- See `scripts/WINDOWS_SCRIPT_STATUS.md` for equivalents
+
+---
+
+## Testing Guidelines
+
+### Test Priorities
+
+1. **Unit tests** - Fast, isolated tests for individual functions
+2. **Integration tests** - Tests that verify crate interactions
+3. **E2E tests** - Full-system tests in `tests/e2e/`
+
+### Test Execution
+
+**During development:**
+- Run targeted tests for the code you're modifying
+- Use `cargo test <package>` to test specific crates
+- Use `cargo test <test_name>` to run specific tests
+
+**Before completion:**
+- Run the full test suite
+- Ensure all tests pass
+- Check for test coverage gaps
+
+### Test Patterns
+
+Use the AAA pattern (Arrange-Act-Assert) for all tests:
+```rust
+#[test]
+fn test_example() {
+    // Arrange
+    let input = create_test_input();
+
+    // Act
+    let result = process(input);
+
+    // Assert
+    assert_eq!(result, expected);
+}
+```
+
+---
+
+## Logs and Debugging
+
+### Log Location
+
+Logs are written to `~/.jcode/logs/` with daily files named `jcode-YYYY-MM-DD.log`.
+
+### Debug Socket
+
+Use the debug socket for runtime-level debugging. This provides real-time access to the running process state.
+
+### Debugging Tips
+
+**For build issues:**
+- Check `cargo check` output for compilation errors
+- Use `RUST_BACKTRACE=1` for stack traces
+- Review build logs in CI for reproducible issues
+
+**For runtime issues:**
+- Enable debug logging if available
+- Use the debug socket for live inspection
+- Check log files for error patterns
+
+---
 
 ## Platform-Aware Scripts
 
-- The repository has PowerShell (`.ps1`) equivalents for most shell scripts (`.sh`)
-- On Windows, scripts automatically use `.ps1` versions; on Unix/Linux/macOS, they use `.sh` versions
-- The `src/platform.rs` module provides `script_extension()` and `platform_script_path()` helpers for dynamic script selection
-- When referencing scripts in code, use `crate::platform::platform_script_path("scripts/foo.sh")` to get the platform-appropriate path
-- See `scripts/WINDOWS_SCRIPT_STATUS.md` for a complete list of script equivalents and platform-specific scripts
+### Script Equivalents
+
+The repository maintains PowerShell (`.ps1`) equivalents for most shell scripts (`.sh`):
+
+- **Windows:** Automatically uses `.ps1` versions
+- **Unix/Linux/macOS:** Automatically uses `.sh` versions
+
+### Dynamic Script Selection
+
+The `src/platform.rs` module provides helpers for platform-appropriate script paths:
+
+```rust
+use crate::platform::platform_script_path;
+
+// Returns the platform-appropriate script path
+let script_path = platform_script_path("scripts/foo.sh");
+// On Windows: scripts/foo.ps1
+// On Unix: scripts/foo.sh
+```
+
+### Script Reference
+
+See `scripts/WINDOWS_SCRIPT_STATUS.md` for:
+- Complete list of script equivalents
+- Platform-specific scripts
+- Script availability by platform
+
+---
 
 ## Install Notes
 
-- `~/.local/bin/jcode` is the launcher symlink used from `PATH`.
-- `~/.jcode/builds/current/jcode` is the active local/source-build channel; self-dev builds and `scripts/install_release.sh` point the launcher here.
-- `~/.jcode/builds/stable/jcode` is the stable release channel; `scripts/install.sh` installs this and points the launcher here.
-- `~/.jcode/builds/versions/<version>/jcode` stores immutable binaries.
-- `~/.jcode/builds/canary/jcode` still exists for canary/testing flows, but it is not the primary self-dev install path.
-- On Windows, the equivalents are `%LOCALAPPDATA%\\jcode\\bin\\jcode.exe` for the launcher, `%LOCALAPPDATA%\\jcode\\builds\\stable\\jcode.exe` for stable, and `%LOCALAPPDATA%\\jcode\\builds\\versions\\<version>\\jcode.exe` for immutable installs; `scripts/install.ps1` currently installs the stable channel.
-- Ensure `~/.local/bin` is **before** `~/.cargo/bin` in `PATH`.
+### Unix/Linux/macOS
+
+**Installation Paths:**
+- `~/.local/bin/jcode` - Launcher symlink (in PATH)
+- `~/.jcode/builds/current/jcode` - Active local/source-build channel
+- `~/.jcode/builds/stable/jcode` - Stable release channel
+- `~/.jcode/builds/versions/<version>/jcode` - Immutable versioned binaries
+- `~/.jcode/builds/canary/jcode` - Canary/testing channel (legacy)
+
+**PATH Configuration:**
+Ensure `~/.local/bin` is **before** `~/.cargo/bin` in your PATH.
+
+### Windows
+
+**Installation Paths:**
+- `%LOCALAPPDATA%\jcode\bin\jcode.exe` - Launcher
+- `%LOCALAPPDATA%\jcode\builds\stable\jcode.exe` - Stable release
+- `%LOCALAPPDATA%\jcode\builds\versions\<version>\jcode.exe` - Versioned installs
+
+**Install Script:**
+`scripts/install.ps1` currently installs the stable channel.
+
+### Installation Scripts
+
+- `scripts/install.sh` / `scripts/install.ps1` - Install stable release
+- `scripts/install_release.sh` - Install from local source build
+- `scripts/uninstall.sh` / `scripts/uninstall.ps1` - Remove installation
+
+---
+
+## Related Workflows and Skills
+
+### Workflows
+
+- **`/plan`** - Create project plans using project-planner agent
+- **`/implement`** - Systematically implement features with planning
+- **`/debug`** - Activate DEBUG mode for systematic problem investigation
+- **`/test`** - Generate and execute tests
+- **`/code-fix-loop`** - Review, refactor, and iteratively fix code
+- **`/research`** - Autonomous deep web research
+
+### Skills
+
+- **`clean-code`** - Pragmatic coding standards and best practices
+- **`architecture`** - Architectural decision-making framework
+- **`plan-writing`** - Structured task planning
+- **`systematic-debugging`** - 4-phase debugging methodology
+- **`tdd-workflow`** - Test-driven development workflow
+- **`rust-pro`** - Modern Rust ecosystem expertise
+
+### Rules
+
+- **`.windsurf/rules/windsurfrules.md`** - Universal AI Team Rulebook
+- **`MEMORY[user_global]`** - Global rules that always apply
+
+---
+
+## Common Patterns
+
+### Before Starting Work
+
+1. Read the main project overview
+2. Read the current active phase
+3. Check recent team logs in `.teams/`
+4. Check open questions in `.questions/`
+5. Ensure all tests pass before making changes
+6. Claim a team number and create your team file in `.teams/active/`
+
+### When Modifying Code
+
+- Add code comments: `// TEAM_XXX: Reason for change`
+- Check project documentation for file dependencies
+- Update ALL affected files together
+- Follow existing style and patterns
+- Write general-purpose solutions
+
+### When Finishing Work
+
+1. Mark todos as completed
+2. Update team file with progress
+3. Move team file to `.teams/completed/` if done
+4. Commit changes with descriptive message
+5. Push commits to remote
+6. Save final state to memory for continuity
