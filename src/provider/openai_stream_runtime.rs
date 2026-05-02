@@ -348,7 +348,7 @@ pub(super) async fn try_persistent_ws_continuation(
 
     // Send the continuation request on the existing WebSocket
     let send_started_at = Instant::now();
-    if let Err(e) = state.ws_stream.send(WsMessage::Text(request_text)).await {
+    if let Err(e) = state.ws_stream.send(WsMessage::Text(request_text.into())).await {
         return PersistentWsResult::Failed(format!("send error: {}", e));
     }
     emit_connection_phase(tx, crate::message::ConnectionPhase::WaitingForResponse).await;
@@ -684,7 +684,7 @@ pub(super) async fn stream_response_websocket_persistent(
     })?;
     let request_send_started_at = Instant::now();
     ws_stream
-        .send(WsMessage::Text(request_text))
+        .send(WsMessage::Text(request_text.into()))
         .await
         .map_err(|err| OpenAIStreamFailure::Other(anyhow::anyhow!(err)))?;
     emit_connection_phase(&tx, ConnectionPhase::WaitingForResponse).await;

@@ -291,7 +291,7 @@ async fn handle_ws_connection(
                     let trimmed = line.trim_end().to_string();
                     if !trimmed.is_empty() {
                         let mut sink = sink_for_unix.lock().await;
-                        if sink.send(Message::Text(trimmed)).await.is_err() {
+                        if sink.send(Message::Text(trimmed.into())).await.is_err() {
                             break;
                         }
                     }

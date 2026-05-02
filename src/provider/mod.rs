@@ -1158,6 +1158,10 @@ impl Provider for MultiProvider {
                 .openrouter_provider()
                 .map(|openrouter| openrouter.available_models_for_switching())
                 .unwrap_or_default(),
+            ActiveProvider::OpenCodeGo => self
+                .opencode_go_provider()
+                .map(|p| p.available_models_for_switching())
+                .unwrap_or_default(),
         }
     }
 
@@ -1352,6 +1356,22 @@ impl Provider for MultiProvider {
                         model,
                         provider: "Windsurf".to_string(),
                         api_method: "windsurf".to_string(),
+                        available: true,
+                        detail: String::new(),
+                        cheapness: None,
+                    });
+                }
+            }
+        }
+
+        // OpenCodeGo models
+        {
+            if let Some(opencode_go) = self.opencode_go_provider() {
+                for model in opencode_go.available_models_display() {
+                    routes.push(ModelRoute {
+                        model,
+                        provider: "opencode-go".to_string(),
+                        api_method: "opencode-go".to_string(),
                         available: true,
                         detail: String::new(),
                         cheapness: None,

@@ -12,6 +12,7 @@ pub(super) use self::auth_types::{AccountCommand, PendingAccountInput, PendingLo
 
 use super::*;
 use crossterm::event::{KeyCode, KeyModifiers};
+use rand::RngExt;
 use std::sync::Arc;
 
 impl App {
