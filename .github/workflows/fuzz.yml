@@ -1,0 +1,82 @@
+name: Fuzz Testing
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  schedule:
+    # Run weekly on Sundays at 4 AM UTC
+    - cron: '0 4 * * 0'
+  workflow_dispatch:
+
+concurrency:
+  group: fuzz-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    name: Fuzz (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - agent
+          - ambient
+          - auth
+        include:
+          - target: agent
+            fuzz_target: agent_fuzz
+          - target: ambient
+            fuzz_target: ambient_fuzz
+          - target: auth
+            fuzz_target: auth_fuzz
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          submodules: recursive
+
+      - name: Configure SSH for cargo git dependencies
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rust-src
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: fuzz-${{ matrix.target }}
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: Initialize fuzz target
+        run: cargo fuzz init --name ${{ matrix.fuzz_target }} || true
+        continue-on-error: true
+
+      - name: Run fuzz tests
+        run: cargo fuzz run ${{ matrix.fuzz_target }} -- -max_total_time=300
+        continue-on-error: true
+
+      - name: Upload fuzz corpus
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-corpus-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.fuzz_target }}/
+        continue-on-error: true
+
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crash-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.fuzz_target }}/
+        continue-on-error: true

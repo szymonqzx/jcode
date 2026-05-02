@@ -1,0 +1,87 @@
+name: Benchmark
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: benchmark-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  benchmark:
+    name: Benchmark (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          submodules: recursive
+
+      - name: Configure SSH for cargo git dependencies
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: benchmark-${{ matrix.os }}
+
+      - name: Install mold linker
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mold
+
+      - name: Build release binary
+        shell: bash
+        run: |
+          mkdir -p .cargo
+          echo '[target.x86_64-unknown-linux-gnu]' > .cargo/config.toml
+          echo 'linker = "clang"' >> .cargo/config.toml
+          echo 'rustflags = ["-C", "link-arg=-fuse-ld=mold"]' >> .cargo/config.toml
+          cargo build --release --target ${{ matrix.target }}
+
+      - name: Run benchmarks
+        shell: bash
+        run: |
+          cargo install cargo-criterion --locked
+          cargo criterion --target ${{ matrix.target }}
+        continue-on-error: true
+
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'cargo'
+          output-file-path: target/criterion/report/index.html
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          alert-threshold: '150%'
+          comment-on-alert: true
+          alert-comment-cc-users: '@1jehuang'
+          fail-on-alert: true
+        continue-on-error: true
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ matrix.os }}
+          path: target/criterion/
+        continue-on-error: true

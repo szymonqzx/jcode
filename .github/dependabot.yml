@@ -1,0 +1,31 @@
+version: 2
+updates:
+  # Update Rust dependencies in Cargo.toml
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "1jehuang"
+    assignees:
+      - "1jehuang"
+    labels:
+      - "dependencies"
+      - "rust"
+    commit-message:
+      prefix: "cargo"
+      include: "scope"
+    groups:
+      # Group all minor/patch updates together
+      rust-dependencies:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "openssl-sys"
+          - "ring"
+        update-types:
+          - "minor"
+          - "patch"
