@@ -1871,7 +1871,6 @@ impl Provider for MultiProvider {
             ActiveProvider::Gemini => vec![],
             ActiveProvider::Cursor => vec![],
             ActiveProvider::Windsurf => vec![],
-            ActiveProvider::OpenCodeGo => vec![],
             _ => vec![],
         }
     }
@@ -1951,7 +1950,6 @@ impl Provider for MultiProvider {
             ActiveProvider::Gemini => vec![],
             ActiveProvider::Cursor => vec![],
             ActiveProvider::Windsurf => vec![],
-            ActiveProvider::OpenCodeGo => vec![],
             _ => vec![],
         }
     }
