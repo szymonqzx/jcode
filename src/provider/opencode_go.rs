@@ -5,6 +5,7 @@
 //! Model selection and routing are handled by jcode, not this provider.
 
 use super::{EventStream, Provider};
+use super::common::{recover_rwlock_read, recover_rwlock_write};
 use super::openai_request::build_tools;
 use crate::message::{ContentBlock, Message, Role, StreamEvent, ToolDefinition};
 use crate::provider_catalog::{
@@ -20,30 +21,6 @@ use serde_json::Value;
 use std::sync::{Arc, RwLock};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
-
-/// Helper function to recover from poisoned RwLock with logging
-fn recover_rwlock_read<T, F>(lock: &RwLock<T>, fallback: F, context: &str) -> T
-where
-    F: FnOnce(&T) -> T,
-{
-    lock.read().unwrap_or_else(|e| {
-        crate::logging::warn(&format!("Recovering from poisoned RwLock in opencode-go provider ({})", context));
-        let guard = e.into_inner();
-        fallback(&guard)
-    }).clone()
-}
-
-/// Helper function to recover from poisoned RwLock with logging (write)
-fn recover_rwlock_write<T, F>(lock: &RwLock<T>, fallback: F, context: &str) -> T
-where
-    F: FnOnce(&T) -> T,
-{
-    lock.write().unwrap_or_else(|e| {
-        crate::logging::warn(&format!("Recovering from poisoned RwLock in opencode-go provider ({})", context));
-        let guard = e.into_inner();
-        fallback(&guard)
-    })
-}
 
 const DEFAULT_API_BASE: &str = "https://opencode.ai/zen/go/v1";
 const DEFAULT_MODEL: &str = "deepseek-v4-flash";
@@ -93,7 +70,13 @@ impl OpenCodeGoProvider {
         Self {
             client: crate::provider::shared_http_client(),
             model: Arc::new(RwLock::new(model)),
-            api_base: crate::provider_catalog::normalize_api_base(&api_base).unwrap_or_else(|_| DEFAULT_API_BASE.to_string()),
+            api_base: match crate::provider_catalog::normalize_api_base(&api_base) {
+                Ok(base) => base,
+                Err(e) => {
+                    crate::logging::warn(&format!("Failed to normalize API base '{}', using default: {}", api_base, e));
+                    DEFAULT_API_BASE.to_string()
+                }
+            },
             api_key,
         }
     }
@@ -115,7 +98,7 @@ impl OpenCodeGoProvider {
         let openai_messages = build_openai_messages(messages, system)?;
         let openai_tools = build_tools(tools);
 
-        let model = recover_rwlock_read(&self.model, |guard| guard, "model read");
+        let model = recover_rwlock_read(&self.model, |guard| guard, "opencode-go", "model read");
         let mut request_body = serde_json::json!({
             "model": model,
             "messages": openai_messages,
@@ -181,7 +164,7 @@ impl Provider for OpenCodeGoProvider {
     }
 
     fn model(&self) -> String {
-        recover_rwlock_read(&self.model, |guard| guard, "model read")
+        recover_rwlock_read(&self.model, |guard| guard, "opencode-go", "model read")
     }
 
     fn set_model(&self, model: &str) -> Result<()> {
@@ -189,16 +172,16 @@ impl Provider for OpenCodeGoProvider {
         if trimmed.is_empty() {
             anyhow::bail!("OpenCode Go model cannot be empty");
         }
-        *recover_rwlock_write(&self.model, |guard| guard, "model write") = trimmed.to_string();
+        *recover_rwlock_write(&self.model, |guard| guard, "opencode-go", "model write") = trimmed.to_string();
         Ok(())
     }
 
     fn available_models_display(&self) -> Vec<String> {
-        vec!["deepseek-v4-flash".to_string(), "THUDM/GLM-4.5".to_string()]
+        KNOWN_MODELS.iter().map(|s| s.to_string()).collect()
     }
 
     fn available_models_for_switching(&self) -> Vec<String> {
-        vec!["deepseek-v4-flash".to_string(), "THUDM/GLM-4.5".to_string()]
+        KNOWN_MODELS.iter().map(|s| s.to_string()).collect()
     }
 
     fn context_window(&self) -> usize {
@@ -269,9 +252,18 @@ fn build_openai_messages(messages: &[Message], system: &str) -> Result<Vec<Value
                 ContentBlock::Reasoning { text } => serde_json::json!(text),
                 ContentBlock::ToolUse { id, name, input } => {
                     let arguments = if input.is_object() {
-                        serde_json::to_string(input).unwrap_or_else(|_| "{}".to_string())
+                        match serde_json::to_string(input) {
+                            Ok(s) => s,
+                            Err(e) => {
+                                crate::logging::warn(&format!("Failed to serialize tool input to JSON: {}", e));
+                                "{}".to_string()
+                            }
+                        }
                     } else {
-                        input.as_str().unwrap_or("{}").to_string()
+                        input.as_str().unwrap_or_else(|| {
+                            crate::logging::warn("Tool input is not a string, using empty object");
+                            "{}"
+                        }).to_string()
                     };
                     serde_json::json!({
                         "role": "assistant",
@@ -297,9 +289,18 @@ fn build_openai_messages(messages: &[Message], system: &str) -> Result<Vec<Value
                     .filter_map(|block| {
                         if let ContentBlock::ToolUse { id, name, input } = block {
                             let arguments = if input.is_object() {
-                                serde_json::to_string(input).unwrap_or_else(|_| "{}".to_string())
+                                match serde_json::to_string(input) {
+                                    Ok(s) => s,
+                                    Err(e) => {
+                                        crate::logging::warn(&format!("Failed to serialize tool input to JSON: {}", e));
+                                        "{}".to_string()
+                                    }
+                                }
                             } else {
-                                input.as_str().unwrap_or("{}").to_string()
+                                input.as_str().unwrap_or_else(|| {
+                                    crate::logging::warn("Tool input is not a string, using empty object");
+                                    "{}"
+                                }).to_string()
                             };
                             Some(serde_json::json!({
                                 "id": id,
@@ -380,6 +381,8 @@ async fn convert_openai_stream_to_anthropic(
         let mut buffer = String::new();
         const MAX_BUFFER_SIZE: usize = 1024 * 1024; // 1MB limit to prevent memory issues
         let mut message_end_sent = false;
+        // Track partial tool calls for streaming argument accumulation
+        let mut partial_tool_calls: std::collections::HashMap<String, (String, String)> = std::collections::HashMap::new();
 
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
@@ -422,18 +425,18 @@ async fn convert_openai_stream_to_anthropic(
                                                 for tool_call in tool_calls {
                                                     if let Some(id) = tool_call.get("id").and_then(|v| v.as_str()) {
                                                         if let Some(function) = tool_call.get("function") {
-                                                            if let Some(name) = function.get("name").and_then(|v| v.as_str()) {
-                                                                if let Some(arguments) = function.get("arguments").and_then(|v| v.as_str()) {
-                                                                    // Send tool use event
-                                                                    if tx.send(Ok(StreamEvent::ToolUse {
-                                                                        id: id.to_string(),
-                                                                        name: name.to_string(),
-                                                                        input: arguments.to_string(),
-                                                                    })).await.is_err() {
-                                                                        return;
+                                                            let name = function.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                                                            let arguments = function.get("arguments").and_then(|v| v.as_str()).unwrap_or("");
+
+                                                            // Accumulate arguments for this tool call
+                                                            partial_tool_calls.entry(id.to_string())
+                                                                .and_modify(|(existing_name, existing_args)| {
+                                                                    if !name.is_empty() {
+                                                                        *existing_name = name.to_string();
                                                                     }
-                                                                }
-                                                            }
+                                                                    existing_args.push_str(arguments);
+                                                                })
+                                                                .or_insert((name.to_string(), arguments.to_string()));
                                                         }
                                                     }
                                                 }
@@ -441,6 +444,18 @@ async fn convert_openai_stream_to_anthropic(
                                         }
 
                                         if let Some(finish_reason) = choice.get("finish_reason").and_then(|v| v.as_str()) {
+                                            // Send accumulated tool calls when stream finishes
+                                            if !partial_tool_calls.is_empty() {
+                                                for (id, (name, arguments)) in partial_tool_calls.drain() {
+                                                    if tx.send(Ok(StreamEvent::ToolUse {
+                                                        id,
+                                                        name,
+                                                        input: arguments,
+                                                    })).await.is_err() {
+                                                        return;
+                                                    }
+                                                }
+                                            }
                                             if finish_reason == "stop" {
                                                 if !message_end_sent {
                                                     if tx.send(Ok(StreamEvent::MessageEnd { stop_reason: Some(finish_reason.to_string()) })).await.is_err() {
@@ -453,23 +468,25 @@ async fn convert_openai_stream_to_anthropic(
                                         }
                                     }
                                 }
+                            } else {
+                                // Log JSON parse error
+                                crate::logging::warn(&format!("Failed to parse SSE JSON: {}", data));
                             }
                         }
                     }
 
-                    // Keep only incomplete lines in buffer
-                    // Find the last newline in the original buffer (before normalization)
-                    if let Some(last_newline) = buffer.rfind('\n') {
-                        buffer = buffer[last_newline + 1..].to_string();
+                    // Keep only incomplete lines in buffer (use normalized buffer)
+                    if let Some(last_newline) = normalized.rfind('\n') {
+                        buffer = normalized[last_newline + 1..].to_string();
                     } else {
                         // No newline found - check buffer size to prevent unbounded growth
-                        // Only clear if buffer exceeds size limit, otherwise keep it for next chunk
-                        if buffer.len() > MAX_BUFFER_SIZE {
-                            crate::logging::warn(&format!(
-                                "Stream buffer exceeded {} bytes, clearing to prevent memory issues",
-                                MAX_BUFFER_SIZE
-                            ));
+                        if normalized.len() > MAX_BUFFER_SIZE {
+                            if tx.send(Err(anyhow::anyhow!("Stream buffer exceeded {} bytes, clearing to prevent memory issues", MAX_BUFFER_SIZE))).await.is_err() {
+                                return;
+                            }
                             buffer.clear();
+                        } else {
+                            buffer = normalized;
                         }
                     }
                 }
@@ -496,6 +513,7 @@ async fn convert_openai_stream_to_anthropic(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::message::{ContentBlock, Message, Role};
 
     #[test]
     fn test_normalize_api_base() {
@@ -511,5 +529,153 @@ mod tests {
             crate::provider_catalog::normalize_api_base("https://opencode.ai/zen/go").unwrap(),
             "https://opencode.ai/zen/go/v1"
         );
+    }
+
+    #[test]
+    fn test_known_models() {
+        assert!(is_known_model("deepseek-v4-flash"));
+        assert!(is_known_model("THUDM/GLM-4.5"));
+        assert!(!is_known_model("unknown-model"));
+        assert!(is_known_model("  deepseek-v4-flash  ")); // trim handling
+    }
+
+    #[test]
+    fn test_available_models_uses_constant() {
+        let provider = OpenCodeGoProvider::new(
+            "https://opencode.ai/zen/go/v1".to_string(),
+            "test_key".to_string(),
+            "deepseek-v4-flash".to_string(),
+        );
+
+        let display = provider.available_models_display();
+        let switching = provider.available_models_for_switching();
+
+        assert_eq!(display.len(), KNOWN_MODELS.len());
+        assert_eq!(switching.len(), KNOWN_MODELS.len());
+        assert!(display.contains(&"deepseek-v4-flash".to_string()));
+        assert!(display.contains(&"THUDM/GLM-4.5".to_string()));
+    }
+
+    #[test]
+    fn test_context_window() {
+        let provider = OpenCodeGoProvider::new(
+            "https://opencode.ai/zen/go/v1".to_string(),
+            "test_key".to_string(),
+            "deepseek-v4-flash".to_string(),
+        );
+
+        assert_eq!(provider.context_window(), 1_048_576);
+
+        provider.set_model("THUDM/GLM-4.5").unwrap();
+        assert_eq!(provider.context_window(), 131_072);
+
+        provider.set_model("unknown-model").unwrap();
+        assert_eq!(provider.context_window(), 131_072); // conservative default
+    }
+
+    #[test]
+    fn test_set_model_empty() {
+        let provider = OpenCodeGoProvider::new(
+            "https://opencode.ai/zen/go/v1".to_string(),
+            "test_key".to_string(),
+            "deepseek-v4-flash".to_string(),
+        );
+
+        assert!(provider.set_model("").is_err());
+        assert!(provider.set_model("  ").is_err());
+        assert!(provider.set_model("valid-model").is_ok());
+    }
+
+    #[test]
+    fn test_build_openai_messages_simple() {
+        let messages = vec![
+            Message {
+                role: Role::User,
+                content: vec![ContentBlock::Text { text: "Hello".to_string(), cache_control: None }],
+            },
+        ];
+
+        let result = build_openai_messages(&messages, "").unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0]["role"], "user");
+        assert_eq!(result[0]["content"], "Hello");
+    }
+
+    #[test]
+    fn test_build_openai_messages_with_system() {
+        let messages = vec![
+            Message {
+                role: Role::User,
+                content: vec![ContentBlock::Text { text: "Hello".to_string(), cache_control: None }],
+            },
+        ];
+
+        let result = build_openai_messages(&messages, "You are a helpful assistant").unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0]["role"], "system");
+        assert_eq!(result[1]["role"], "user");
+    }
+
+    #[test]
+    fn test_build_openai_messages_tool_use() {
+        let messages = vec![
+            Message {
+                role: Role::Assistant,
+                content: vec![
+                    ContentBlock::ToolUse {
+                        id: "call_123".to_string(),
+                        name: "test_tool".to_string(),
+                        input: serde_json::json!({"param": "value"}),
+                    },
+                ],
+            },
+        ];
+
+        let result = build_openai_messages(&messages, "").unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0]["role"], "assistant");
+        assert!(result[0].get("tool_calls").is_some());
+    }
+
+    #[test]
+    fn test_build_openai_messages_tool_result() {
+        let messages = vec![
+            Message {
+                role: Role::Assistant,
+                content: vec![ContentBlock::ToolUse {
+                    id: "call_123".to_string(),
+                    name: "test_tool".to_string(),
+                    input: serde_json::json!({"param": "value"}),
+                }],
+            },
+            Message {
+                role: Role::User,
+                content: vec![ContentBlock::ToolResult {
+                    tool_use_id: "call_123".to_string(),
+                    content: "Result".to_string(),
+                    is_error: Some(false),
+                }],
+            },
+        ];
+
+        let result = build_openai_messages(&messages, "").unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[1]["role"], "tool");
+        assert_eq!(result[1]["tool_call_id"], "call_123");
+    }
+
+    #[test]
+    fn test_provider_fork() {
+        let provider = OpenCodeGoProvider::new(
+            "https://opencode.ai/zen/go/v1".to_string(),
+            "test_key".to_string(),
+            "deepseek-v4-flash".to_string(),
+        );
+
+        provider.set_model("new-model").unwrap();
+
+        let forked = provider.fork();
+        assert_eq!(forked.name(), "opencode-go");
+        assert_eq!(forked.model(), "new-model");
     }
 }

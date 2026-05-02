@@ -1,5 +1,6 @@
 mod accessors;
 mod account_failover;
+mod common;
 pub mod anthropic;
 pub mod antigravity;
 mod catalog_refresh;
