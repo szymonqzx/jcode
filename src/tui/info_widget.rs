@@ -488,7 +488,7 @@ pub struct GraphEdge {
     pub kind: String,
 }
 
-pub use crate::tui::mermaid::DiagramInfo;
+pub use jcode_tui_mermaid::DiagramInfo;
 
 /// Git repository status for the info widget
 #[derive(Debug, Clone)]

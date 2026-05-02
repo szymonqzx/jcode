@@ -361,7 +361,7 @@ struct ImageRegion {
     height: u16,
 }
 
-pub(crate) use crate::tui::markdown::{CopyTargetKind, RawCopyTarget};
+pub(crate) use jcode_tui_markdown::{CopyTargetKind, RawCopyTarget};
 
 #[derive(Clone, Debug)]
 struct CopyTarget {

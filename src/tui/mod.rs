@@ -14,7 +14,6 @@ pub mod login_picker;
 pub mod markdown;
 mod memory_profile;
 pub mod mermaid;
-pub mod workspace;
 pub mod permissions;
 mod remote_diff;
 pub mod screenshot;
@@ -26,8 +25,8 @@ mod ui_diff;
 pub mod usage_overlay;
 pub mod visual_debug;
 pub mod workspace_client;
-pub use workspace::workspace_map;
-pub use workspace::workspace_map_widget;
+pub use jcode_tui_workspace::workspace_map;
+pub use jcode_tui_workspace::workspace_map_widget;
 
 pub use app::{App, CopyBadgeUiState, DisplayMessage, ProcessingStatus, RunResult};
 pub use generated_image::{
