@@ -29,12 +29,10 @@ All agents MUST automatically git commit when finishing a task.
 - If git state is not clean or other agents are working in parallel, still commit your work
 - Push all commits to remote when finishing a task or session
 - Use conventional commit format when applicable
-- Reference team IDs when applicable: `// TEAM_XXX: <reason>`
 
 **Commit Triggers:**
 - After completing each feature, fix, or refactoring
 - After passing all relevant tests
-- Before marking a task as complete in todo list
 - After any substantial code change (>30 lines OR 3+ files modified)
 - Small changes (≤30 lines and <3 files) should not be committed unless completing a task
 
@@ -75,7 +73,6 @@ All agents MUST automatically git commit when finishing a task.
 ```
 jcode/
 ├── .github/           # GitHub Actions workflows
-├── .windsurf/         # AI instruction files (agents, skills, workflows, rules)
 ├── crates/            # Workspace crates
 ├── docs/              # Project documentation
 ├── scripts/           # Build and utility scripts
