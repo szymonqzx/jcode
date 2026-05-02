@@ -66,7 +66,6 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mold
-
       - name: Build release binary
         shell: bash
         run: |
@@ -92,7 +91,6 @@ jobs:
           cp target/${{ matrix.target }}/release/jcode dist/${{ matrix.artifact }}
           chmod +x dist/${{ matrix.artifact }}
           cd dist && tar czf ${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -158,13 +156,11 @@ jobs:
               $env:RUSTC_WRAPPER = "sccache"
             }
           }
-
           $cargoArgs = @("build", "--release", "--target", "${{ matrix.target }}")
           $extraArgs = "${{ matrix.cargo_args }}"
           if (-not [string]::IsNullOrWhiteSpace($extraArgs)) {
             $cargoArgs += $extraArgs -split ' '
           }
-
           & cargo @cargoArgs
         env:
           JCODE_RELEASE_BUILD: "1"
@@ -178,14 +174,12 @@ jobs:
             'provider_behavior::test_socket_model_cycle_supported_models',
             'provider_behavior::test_model_switch_resets_provider_session'
           )
-
           foreach ($testName in $tests) {
             & cargo test --locked --target ${{ matrix.target }} --test e2e $testName -- --exact --nocapture
             if ($LASTEXITCODE -ne 0) {
               throw "Windows smoke test failed: $testName"
             }
           }
-
       - name: Verify built Windows binary launches
         shell: pwsh
         run: |
@@ -193,21 +187,18 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "Built Windows binary failed to run --version"
           }
-
       - name: Verify Windows installer with local artifact
         shell: pwsh
         run: |
           & ./.github/scripts/verify_windows_install.ps1 `
             -ArtifactExePath "target/${{ matrix.target }}/release/jcode.exe" `
             -Version "${{ github.ref_name }}"
-
       - name: Package binary
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/jcode.exe" "dist/${{ matrix.artifact }}.exe"
           tar -czf "dist/${{ matrix.artifact }}.tar.gz" -C dist "${{ matrix.artifact }}.exe"
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -215,7 +206,6 @@ jobs:
           path: |
             dist/${{ matrix.artifact }}.tar.gz
             dist/${{ matrix.artifact }}.exe
-
   release:
     name: Create Release
     needs: [build-linux-macos]
@@ -238,7 +228,6 @@ jobs:
           files: |
             artifacts/jcode-linux-x86_64/*.tar.gz
             artifacts/jcode-macos-aarch64/*.tar.gz
-
       - name: Update Homebrew formula
         env:
           HOMEBREW_DEPLOY_KEY: ${{ secrets.HOMEBREW_DEPLOY_KEY }}
@@ -246,74 +235,60 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME}"
           VERSION_NUM="${VERSION#v}"
-
           LINUX_SHA=$(sha256sum artifacts/jcode-linux-x86_64/jcode-linux-x86_64.tar.gz | cut -d' ' -f1)
           MACOS_SHA=$(sha256sum artifacts/jcode-macos-aarch64/jcode-macos-aarch64.tar.gz | cut -d' ' -f1)
-
           mkdir -p ~/.ssh
           echo "$HOMEBREW_DEPLOY_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           export GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
-
-          git clone git@github.com:szymonqzx/homebrew-jcode.git /tmp/homebrew-jcode
-
+          git clone git@github.com:1jehuang/homebrew-jcode.git /tmp/homebrew-jcode
           cat > /tmp/homebrew-jcode/Formula/jcode.rb << FORMULA
           class Jcode < Formula
             desc "AI coding agent powered by Claude and ChatGPT"
-            homepage "https://github.com/szymonqzx/jcode"
+            homepage "https://github.com/1jehuang/jcode"
             version "${VERSION_NUM}"
             license "MIT"
-
             on_macos do
               on_arm do
-                url "https://github.com/szymonqzx/jcode/releases/download/${VERSION}/jcode-macos-aarch64.tar.gz"
+                url "https://github.com/1jehuang/jcode/releases/download/${VERSION}/jcode-macos-aarch64.tar.gz"
                 sha256 "${MACOS_SHA}"
-
                 def install
                   bin.install "jcode-macos-aarch64" => "jcode"
                 end
               end
             end
-
             on_linux do
               on_intel do
-                url "https://github.com/szymonqzx/jcode/releases/download/${VERSION}/jcode-linux-x86_64.tar.gz"
+                url "https://github.com/1jehuang/jcode/releases/download/${VERSION}/jcode-linux-x86_64.tar.gz"
                 sha256 "${LINUX_SHA}"
-
                 def install
                   bin.install "jcode-linux-x86_64" => "jcode"
                 end
               end
             end
-
             test do
               assert_match "jcode", shell_output("#{bin}/jcode --version")
             end
           end
           FORMULA
-
           sed -i 's/^          //' /tmp/homebrew-jcode/Formula/jcode.rb
-
           cd /tmp/homebrew-jcode
           git config user.name "jcode-release-bot"
           git config user.email "release@jcode.dev"
           git add Formula/jcode.rb
           git commit -m "Update to ${VERSION}" || echo "No changes"
           git push
-
       - name: Update AUR package
         env:
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
         if: env.AUR_SSH_KEY != ''
         run: |
           set -euo pipefail
-
           retry() {
             local attempts="$1"
             local delay="$2"
             shift 2
             local try=1
-
             until "$@"; do
               local exit_code=$?
               if [ "$try" -ge "$attempts" ]; then
@@ -324,13 +299,10 @@ jobs:
               try=$((try + 1))
             done
           }
-
           VERSION="${GITHUB_REF_NAME}"
           VERSION_NUM="${VERSION#v}"
-
           LINUX_SHA=$(sha256sum artifacts/jcode-linux-x86_64/jcode-linux-x86_64.tar.gz | cut -d' ' -f1)
-          LINUX_URL="https://github.com/szymonqzx/jcode/releases/download/${VERSION}/jcode-linux-x86_64.tar.gz"
-
+          LINUX_URL="https://github.com/1jehuang/jcode/releases/download/${VERSION}/jcode-linux-x86_64.tar.gz"
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           printf '%s\n' "$AUR_SSH_KEY" > ~/.ssh/aur_key
@@ -338,13 +310,10 @@ jobs:
           touch ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
           retry 3 5 bash -lc 'ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts'
-
           export GIT_SSH_COMMAND="ssh -i ~/.ssh/aur_key -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -o ConnectTimeout=10 -o ConnectionAttempts=3"
-
           retry 3 5 bash -lc 'rm -rf /tmp/jcode-aur && git clone --depth 1 ssh://aur@aur.archlinux.org/jcode-bin.git /tmp/jcode-aur'
           cd /tmp/jcode-aur
           git remote set-url origin ssh://aur@aur.archlinux.org/jcode-bin.git
-
           cat > PKGBUILD << 'PKGBUILD_END'
           # Maintainer: Jeremy Huang <jeremyhuang55555@gmail.com>
           pkgname=jcode-bin
@@ -352,29 +321,26 @@ jobs:
           pkgrel=1
           pkgdesc="AI coding agent powered by Claude and ChatGPT"
           arch=('x86_64')
-          url="https://github.com/szymonqzx/jcode"
+          url="https://github.com/1jehuang/jcode"
           license=('MIT')
           provides=('jcode')
           conflicts=('jcode')
           source=("URL_PLACEHOLDER")
           sha256sums=('SHA_PLACEHOLDER')
-
           package() {
               install -Dm755 "${srcdir}/jcode-linux-x86_64" "${pkgdir}/usr/bin/jcode"
           }
           PKGBUILD_END
-
           sed -i "s|VERSION_PLACEHOLDER|${VERSION_NUM}|" PKGBUILD
           sed -i "s|URL_PLACEHOLDER|${LINUX_URL}|" PKGBUILD
           sed -i "s|SHA_PLACEHOLDER|${LINUX_SHA}|" PKGBUILD
           sed -i 's/^          //' PKGBUILD
-
           # Generate .SRCINFO without makepkg (AUR uses tab indentation)
           printf 'pkgbase = jcode-bin\n' > .SRCINFO
           printf '\tpkgdesc = AI coding agent powered by Claude and ChatGPT\n' >> .SRCINFO
           printf '\tpkgver = %s\n' "${VERSION_NUM}" >> .SRCINFO
           printf '\tpkgrel = 1\n' >> .SRCINFO
-          printf '\turl = https://github.com/szymonqzx/jcode\n' >> .SRCINFO
+          printf '\turl = https://github.com/1jehuang/jcode\n' >> .SRCINFO
           printf '\tarch = x86_64\n' >> .SRCINFO
           printf '\tlicense = MIT\n' >> .SRCINFO
           printf '\tprovides = jcode\n' >> .SRCINFO
@@ -382,13 +348,11 @@ jobs:
           printf '\tsource = %s\n' "${LINUX_URL}" >> .SRCINFO
           printf '\tsha256sums = %s\n' "${LINUX_SHA}" >> .SRCINFO
           printf '\npkgname = jcode-bin\n' >> .SRCINFO
-
           git config user.name "Jeremy Huang"
           git config user.email "jeremyhuang55555@gmail.com"
           git add PKGBUILD .SRCINFO
           git commit -m "Update to ${VERSION}" || echo "No changes"
           retry 3 5 git push origin master
-
   upload-windows-assets:
     name: Upload Windows Assets
     needs: [release, build-windows]

@@ -1,0 +1,80 @@
+name: Remote Build
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  native-ubuntu:
+    name: Native build (ubuntu) != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build core binary
+        run: cargo build --release --bin jcode
+
+      - name: Check GUI crate
+        run: cargo check -p jcode-gui
+
+  native-macos:
+    name: Native build (macos)
+    runs-on: macos-latest
+    if: github.event_name != 'pull_request'
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build core binary
+        run: cargo build --release --bin jcode
+
+      - name: Check GUI crate
+        run: cargo check -p jcode-gui
+
+  native-windows:
+    name: Native build (windows)
+    runs-on: windows-latest
+    if: github.event_name
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build core binary
+        run: cargo build --release --bin jcode
+
+      - name: Check GUI crate
+        run: cargo check -p jcode-gui
