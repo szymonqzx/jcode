@@ -24,6 +24,8 @@ SERVER COMMANDS (server: prefix or no prefix):
   last_response            - Get last assistant response
   message:<text>           - Send message to agent
   message_async:<text>     - Send message async (returns job id)
+  swarm_message:<text>     - Plan and run subtasks via swarm workers, then integrate
+  swarm_message_async:<text> - Async swarm message (returns job id)
   tool:<name> <json>       - Execute tool directly
   cancel                   - Cancel in-flight generation (urgent interrupt)
   clear                    - Clear conversation history
