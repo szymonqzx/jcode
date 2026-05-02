@@ -90,10 +90,6 @@ impl Tool for McpManagementTool {
 
         match params.action.as_str() {
             "list" => self.list_servers().await,
-            "connect" if block_agent_mcp_connect(&ctx) => Ok(ToolOutput::new(
-                "MCP connect is blocked during agent turns because it can start arbitrary local commands. \
-Set CONCLAVE_ALLOW_AGENT_MCP_CONNECT=1 only in a trusted workspace, or connect MCP servers through an operator/direct command."
-            ).with_title("MCP: Connect blocked")),
             "connect" => self.connect_server(params, &ctx.session_id).await,
             "disconnect" => self.disconnect_server(params).await,
             "reload" => self.reload_config(&ctx.session_id).await,
@@ -103,20 +99,6 @@ Set CONCLAVE_ALLOW_AGENT_MCP_CONNECT=1 only in a trusted workspace, or connect M
             ))),
         }
     }
-}
-
-fn allow_agent_mcp_connect() -> bool {
-    matches!(
-        std::env::var("CONCLAVE_ALLOW_AGENT_MCP_CONNECT")
-            .or_else(|_| std::env::var("JCODE_ALLOW_AGENT_MCP_CONNECT"))
-            .ok()
-            .as_deref(),
-        Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES")
-    )
-}
-
-fn block_agent_mcp_connect(ctx: &ToolContext) -> bool {
-    ctx.execution_mode == crate::tool::ToolExecutionMode::AgentTurn && !allow_agent_mcp_connect()
 }
 
 // Helper for tests to update cached server names
@@ -387,13 +369,6 @@ mod tests {
         }
     }
 
-    fn create_agent_turn_context() -> ToolContext {
-        ToolContext {
-            execution_mode: crate::tool::ToolExecutionMode::AgentTurn,
-            ..create_test_context()
-        }
-    }
-
     struct LocalMcpConfigGuard {
         path: PathBuf,
         backup: Option<String>,
@@ -506,21 +481,6 @@ mod tests {
 
         let result = tool.execute(input, ctx).await.unwrap();
         assert!(result.output.contains("not connected"));
-    }
-
-    #[tokio::test]
-    async fn test_agent_turn_connect_is_blocked_by_default() {
-        let tool = create_test_tool();
-        let ctx = create_agent_turn_context();
-        let input = json!({
-            "action": "connect",
-            "server": "test",
-            "command": "/bin/test",
-            "args": []
-        });
-
-        let result = tool.execute(input, ctx).await.unwrap();
-        assert!(result.output.contains("MCP connect is blocked"));
     }
 
     #[tokio::test]

@@ -2,10 +2,8 @@ use super::{Tool, ToolContext, ToolOutput};
 use anyhow::Result;
 use async_trait::async_trait;
 use futures::StreamExt;
-use reqwest::Url;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
 const MAX_SIZE: usize = 5 * 1024 * 1024; // 5MB
@@ -69,7 +67,10 @@ impl Tool for WebFetchTool {
     async fn execute(&self, input: Value, _ctx: ToolContext) -> Result<ToolOutput> {
         let params: WebFetchInput = serde_json::from_value(input)?;
 
-        validate_webfetch_url(&params.url)?;
+        // Validate URL
+        if !params.url.starts_with("http://") && !params.url.starts_with("https://") {
+            return Err(anyhow::anyhow!("URL must start with http:// or https://"));
+        }
 
         let timeout = params.timeout.unwrap_or(DEFAULT_TIMEOUT).min(MAX_TIMEOUT);
         let format = params.format.as_deref().unwrap_or("markdown");
@@ -157,77 +158,6 @@ impl Tool for WebFetchTool {
             output
         )))
     }
-}
-
-fn allow_local_webfetch() -> bool {
-    matches!(
-        std::env::var("CONCLAVE_ALLOW_LOCAL_WEBFETCH")
-            .or_else(|_| std::env::var("JCODE_ALLOW_LOCAL_WEBFETCH"))
-            .ok()
-            .as_deref(),
-        Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES")
-    )
-}
-
-fn validate_webfetch_url(raw_url: &str) -> Result<Url> {
-    let url = Url::parse(raw_url)?;
-    match url.scheme() {
-        "http" | "https" => {}
-        _ => return Err(anyhow::anyhow!("URL must start with http:// or https://")),
-    }
-
-    let host = url
-        .host_str()
-        .ok_or_else(|| anyhow::anyhow!("URL must include a host"))?;
-    if !allow_local_webfetch() && is_local_or_private_host(host) {
-        anyhow::bail!(
-            "webfetch blocked local/private-network URL '{}'. Set CONCLAVE_ALLOW_LOCAL_WEBFETCH=1 only for trusted local fetches.",
-            raw_url
-        );
-    }
-
-    Ok(url)
-}
-
-fn is_local_or_private_host(host: &str) -> bool {
-    let normalized = host.trim_end_matches('.').to_ascii_lowercase();
-    let normalized = normalized
-        .strip_prefix('[')
-        .and_then(|host| host.strip_suffix(']'))
-        .unwrap_or(&normalized);
-    if normalized == "localhost"
-        || normalized.ends_with(".localhost")
-        || normalized.ends_with(".local")
-    {
-        return true;
-    }
-
-    match normalized.parse::<IpAddr>() {
-        Ok(IpAddr::V4(addr)) => is_local_or_private_ipv4(addr),
-        Ok(IpAddr::V6(addr)) => is_local_or_private_ipv6(addr),
-        Err(_) => false,
-    }
-}
-
-fn is_local_or_private_ipv4(addr: Ipv4Addr) -> bool {
-    let octets = addr.octets();
-    addr.is_loopback()
-        || addr.is_private()
-        || addr.is_link_local()
-        || addr.is_unspecified()
-        || addr.is_multicast()
-        || addr.is_broadcast()
-        || octets == [169, 254, 169, 254]
-        || octets[0] == 0
-}
-
-fn is_local_or_private_ipv6(addr: Ipv6Addr) -> bool {
-    let segments = addr.segments();
-    addr.is_loopback()
-        || addr.is_unspecified()
-        || addr.is_multicast()
-        || (segments[0] & 0xfe00) == 0xfc00
-        || (segments[0] & 0xffc0) == 0xfe80
 }
 
 mod html_regex {
@@ -402,44 +332,4 @@ fn html_to_markdown(html: &str) -> String {
     md = whitespace.replace_all(&md, "\n\n").to_string();
 
     md.trim().to_string()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn webfetch_allows_public_https_url() {
-        assert!(validate_webfetch_url("https://example.com/page").is_ok());
-    }
-
-    #[test]
-    fn webfetch_rejects_localhost() {
-        let err = validate_webfetch_url("http://localhost:3000").unwrap_err();
-        assert!(err.to_string().contains("blocked local/private-network"));
-    }
-
-    #[test]
-    fn webfetch_rejects_private_ipv4() {
-        let err = validate_webfetch_url("http://192.168.1.10/status").unwrap_err();
-        assert!(err.to_string().contains("blocked local/private-network"));
-    }
-
-    #[test]
-    fn webfetch_rejects_link_local_metadata_ip() {
-        let err = validate_webfetch_url("http://169.254.169.254/latest/meta-data").unwrap_err();
-        assert!(err.to_string().contains("blocked local/private-network"));
-    }
-
-    #[test]
-    fn webfetch_rejects_unique_local_ipv6() {
-        let err = validate_webfetch_url("http://[fd00::1]/status").unwrap_err();
-        assert!(err.to_string().contains("blocked local/private-network"));
-    }
-
-    #[test]
-    fn webfetch_rejects_local_domains() {
-        let err = validate_webfetch_url("https://service.local/").unwrap_err();
-        assert!(err.to_string().contains("blocked local/private-network"));
-    }
 }

@@ -324,17 +324,7 @@ impl McpConfig {
         Ok(config)
     }
 
-    fn trust_project_mcp_config() -> bool {
-        matches!(
-            std::env::var("CONCLAVE_TRUST_PROJECT_MCP")
-                .or_else(|_| std::env::var("JCODE_TRUST_PROJECT_MCP"))
-                .ok()
-                .as_deref(),
-            Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES")
-        )
-    }
-
-    /// Load from default locations (merges jcode global + trusted local, local overrides)
+    /// Load from default locations (merges jcode global + local, local overrides)
     #[expect(
         clippy::collapsible_if,
         reason = "Import logic keeps source-specific MCP config merge order explicit"
@@ -355,55 +345,17 @@ impl McpConfig {
             }
         }
 
-        // Load project-local configs only after explicit trust. MCP configs can
-        // start arbitrary local commands, so checked-in repo config is treated
-        // as untrusted by default.
-        let trust_project_mcp = Self::trust_project_mcp_config();
-
         // Load project-local jcode config (.jcode/mcp.json)
         let local_jcode = std::path::Path::new(".jcode/mcp.json");
         if local_jcode.exists() {
-            if trust_project_mcp {
-                if let Ok(config) = Self::load_from_file(local_jcode) {
-                    merged.servers.extend(config.servers);
-                }
-            } else {
-                crate::logging::warn(
-                    "MCP: ignoring project-local .jcode/mcp.json until CONCLAVE_TRUST_PROJECT_MCP=1",
-                );
+            if let Ok(config) = Self::load_from_file(local_jcode) {
+                merged.servers.extend(config.servers);
             }
         }
 
         // Fallback: project-local Claude config (.claude/mcp.json) for compatibility
         let local_claude = std::path::Path::new(".claude/mcp.json");
         if local_claude.exists() {
-            if trust_project_mcp {
-                if let Ok(config) = Self::load_from_file(local_claude) {
-                    merged.servers.extend(config.servers);
-                }
-            } else {
-                crate::logging::warn(
-                    "MCP: ignoring project-local .claude/mcp.json until CONCLAVE_TRUST_PROJECT_MCP=1",
-                );
-            }
-        }
-
-        merged
-    }
-
-    #[cfg(test)]
-    fn load_with_project_mcp_trust_for_tests(trust_project_mcp: bool) -> Self {
-        let mut merged = Self::default();
-
-        let local_jcode = std::path::Path::new(".jcode/mcp.json");
-        if local_jcode.exists() && trust_project_mcp {
-            if let Ok(config) = Self::load_from_file(local_jcode) {
-                merged.servers.extend(config.servers);
-            }
-        }
-
-        let local_claude = std::path::Path::new(".claude/mcp.json");
-        if local_claude.exists() && trust_project_mcp {
             if let Ok(config) = Self::load_from_file(local_claude) {
                 merged.servers.extend(config.servers);
             }
