@@ -1,6 +1,6 @@
 #[test]
 fn test_protocol_request_roundtrip_randomized_samples() -> Result<()> {
-    use rand::{Rng, RngExt, SeedableRng};
+    use rand::{Rng, SeedableRng};
 
     fn sample_ascii(rng: &mut rand::rngs::StdRng, max_len: usize) -> String {
         let len = rng.random_range(0..=max_len);

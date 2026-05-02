@@ -6,7 +6,7 @@ use std::process::Command;
 /// Default system prompt for jcode (embedded at compile time)
 pub const DEFAULT_SYSTEM_PROMPT: &str = include_str!("prompt/system_prompt.md");
 const SELFDEV_HINT_PROMPT: &str = include_str!("prompt/selfdev_hint.txt");
-const SELFDEV_MODE_PROMPT: &str = include_str!("prompt/selfdev_mode.md");
+const SELFDEV_MODE_PROMPT: &str = include_str!("prompt/selfdev_mode.txt");
 
 /// Split system prompt for efficient caching
 /// Static content is cached, dynamic content is not
@@ -345,42 +345,30 @@ pub fn build_system_prompt_split(
     )
 }
 
-/// Build self-dev tools prompt section (short hint for non-selfdev sessions)
+/// Build self-dev tools prompt section (static version without dynamic socket path)
 fn build_selfdev_hint_prompt() -> String {
     SELFDEV_HINT_PROMPT.to_string()
 }
 
-/// Build self-dev tools prompt section (static version, strips debug socket details)
+/// Build self-dev tools prompt section (static version without dynamic socket path)
 fn build_selfdev_prompt_static() -> String {
-    // Strip the "### Debug Socket Issues" troubleshooting section since
-    // socket paths vary per session and shouldn't be cached in the static prompt.
-    let parts: Vec<&str> = SELFDEV_MODE_PROMPT.splitn(2, "### Debug Socket Issues").collect();
-    if parts.len() == 2 {
-        platform_adapt_selfdev_prompt(parts[0])
-    } else {
-        platform_adapt_selfdev_prompt(SELFDEV_MODE_PROMPT)
-    }
+    let script_path = crate::platform::platform_script_path("scripts/dev_cargo.sh");
+    let script_example = format!("{} build --profile selfdev -p jcode --bin jcode", script_path);
+    let prompt = SELFDEV_MODE_PROMPT.replace("__DEBUG_SOCKET_BLOCK__\n\n", "");
+    prompt.replace(
+        "scripts/dev_cargo.sh build --profile selfdev -p jcode --bin jcode",
+        &script_example
+    )
 }
 
-/// Build self-dev tools prompt section (full version with debug socket info)
+/// Build self-dev tools prompt section
 fn build_selfdev_prompt() -> String {
-    platform_adapt_selfdev_prompt(&SELFDEV_MODE_PROMPT)
-}
-
-/// Replace platform-specific script references in the selfdev prompt.
-/// On Windows, changes `.sh` script references to direct cargo invocations
-/// since no `.ps1` wrapper exists -- `selfdev build` uses `cmd.exe /C cargo build`.
-fn platform_adapt_selfdev_prompt(prompt: &str) -> String {
-    if cfg!(windows) {
-        prompt
-            .replace("scripts/dev_cargo.sh", "cargo")
-            .replace("`scripts/dev_cargo.sh`", "`cargo`")
-            .replace("Unix/Linux/macOS: `scripts/dev_cargo.sh`", "Windows (use `cargo build` directly ensuring that binary will be in user\.jcode\builds)")
-            .replace("Unix/Linux/macOS", "Windows")
-            .replace("scripts/dev_cargo.ps1", "cargo")
-    } else {
-        prompt.to_string()
-    }
+    let script_path = crate::platform::platform_script_path("scripts/dev_cargo.sh");
+    let script_example = format!("{} build --profile selfdev -p jcode --bin jcode", script_path);
+    SELFDEV_MODE_PROMPT.replace(
+        "scripts/dev_cargo.sh build --profile selfdev -p jcode --bin jcode",
+        &script_example
+    )
 }
 
 /// Build immutable session context captured once per session.

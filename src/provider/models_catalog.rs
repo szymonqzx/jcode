@@ -1,5 +1,4 @@
 use super::*;
-use reqwest::RequestBuilder;
 
 #[derive(Debug, Clone, Default)]
 pub struct OpenAIModelCatalog {
@@ -122,14 +121,17 @@ pub async fn fetch_openai_model_catalog(access_token: &str) -> Result<OpenAIMode
 
 pub async fn fetch_anthropic_model_catalog(api_key: &str) -> Result<AnthropicModelCatalog> {
     fetch_anthropic_model_catalog_with_request(|client, after_id| {
-        let mut url = "https://api.anthropic.com/v1/models?limit=1000".to_string();
-        if let Some(after) = after_id {
-            url.push_str(&format!("&after_id={}", after));
-        }
-        client
-            .get(&url)
+        let mut req = client
+            .get("https://api.anthropic.com/v1/models")
             .header("x-api-key", api_key)
             .header("anthropic-version", "2023-06-01")
+            .query(&[("limit", "1000")]);
+
+        if let Some(after) = after_id {
+            req = req.query(&[("after_id", after)]);
+        }
+
+        req
     })
     .await
 }
@@ -138,13 +140,9 @@ pub async fn fetch_anthropic_model_catalog_oauth(
     access_token: &str,
 ) -> Result<AnthropicModelCatalog> {
     fetch_anthropic_model_catalog_with_request(|client, after_id| {
-        let mut url = "https://api.anthropic.com/v1/models?limit=1000".to_string();
-        if let Some(after) = after_id {
-            url.push_str(&format!("&after_id={}", after));
-        }
-        crate::provider::anthropic::apply_oauth_attribution_headers(
+        let mut req = crate::provider::anthropic::apply_oauth_attribution_headers(
             client
-                .get(&url)
+                .get("https://api.anthropic.com/v1/models")
                 .header("Authorization", format!("Bearer {}", access_token))
                 .header(
                     "User-Agent",
@@ -154,9 +152,16 @@ pub async fn fetch_anthropic_model_catalog_oauth(
                 .header(
                     "anthropic-beta",
                     crate::provider::anthropic::OAUTH_BETA_HEADERS,
-                ),
+                )
+                .query(&[("limit", "1000")]),
             &crate::provider::anthropic::new_oauth_request_id(),
-        )
+        );
+
+        if let Some(after) = after_id {
+            req = req.query(&[("after_id", after)]);
+        }
+
+        req
     })
     .await
 }

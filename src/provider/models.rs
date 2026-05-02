@@ -1,7 +1,6 @@
 use super::{ALL_CLAUDE_MODELS, ALL_OPENAI_MODELS};
 use crate::auth;
 use crate::provider::cursor;
-use crate::provider::opencode_go;
 use crate::provider::windsurf;
 
 #[path = "models_catalog.rs"]
@@ -1257,8 +1256,6 @@ pub fn provider_for_model_with_hint(
         Some("cursor")
     } else if windsurf::is_known_model(model) {
         Some("windsurf")
-    } else if opencode_go::is_known_model(model) {
-        Some("opencode-go")
     } else {
         None
     }
