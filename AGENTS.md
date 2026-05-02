@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-**Purpose:** This document provides operational guidelines for AI agents working on the jcode codebase. It complements the global rules in `.windsurf/rules/windsurfrules.md` and project-specific workflows.
+**Purpose:** This document provides operational guidelines for AI agents working on the jcode codebase. It is self-contained and should be read before starting any work on this repository.
 
 **Last Updated:** 2026-05-03
 
@@ -14,7 +14,7 @@
 - [Logs and Debugging](#logs-and-debugging)
 - [Platform-Aware Scripts](#platform-aware-scripts)
 - [Install Notes](#install-notes)
-- [Related Workflows and Skills](#related-workflows-and-skills)
+- [Common Patterns](#common-patterns)
 
 ---
 
@@ -22,7 +22,7 @@
 
 ### Git Commit Protocol [P0]
 
-All agents MUST automatically git commit when finishing a task. See `.windsurf/rules/windsurfrules.md` for the detailed protocol.
+All agents MUST automatically git commit when finishing a task.
 
 **Commit Guidelines:**
 - Make small, focused commits after completing each feature, fix, or refactoring
@@ -86,12 +86,6 @@ jcode/
 ```
 
 ### Key Directories
-
-**`.windsurf/`** - AI instruction ecosystem
-- `agents/` - Agent definitions and behavior rules
-- `skills/` - Domain-specific knowledge and patterns
-- `workflows/` - Structured task execution patterns
-- `rules/` - Global rules and protocols
 
 **`crates/`** - Workspace crates
 - Each crate is a separate Rust package
@@ -230,57 +224,25 @@ Ensure `~/.local/bin` is **before** `~/.cargo/bin` in your PATH.
 
 ---
 
-## Related Workflows and Skills
-
-### Workflows
-
-- **`/plan`** - Create project plans using project-planner agent
-- **`/implement`** - Systematically implement features with planning
-- **`/debug`** - Activate DEBUG mode for systematic problem investigation
-- **`/test`** - Generate and execute tests
-- **`/code-fix-loop`** - Review, refactor, and iteratively fix code
-- **`/research`** - Autonomous deep web research
-
-### Skills
-
-- **`clean-code`** - Pragmatic coding standards and best practices
-- **`architecture`** - Architectural decision-making framework
-- **`plan-writing`** - Structured task planning
-- **`systematic-debugging`** - 4-phase debugging methodology
-- **`tdd-workflow`** - Test-driven development workflow
-- **`rust-pro`** - Modern Rust ecosystem expertise
-
-### Rules
-
-- **`.windsurf/rules/windsurfrules.md`** - Universal AI Team Rulebook
-- **`MEMORY[user_global]`** - Global rules that always apply
-
----
-
 ## Common Patterns
 
 ### Before Starting Work
 
-1. Read the main project overview
-2. Read the current active phase
-3. Check recent team logs in `.teams/`
-4. Check open questions in `.questions/`
-5. Ensure all tests pass before making changes
-6. Claim a team number and create your team file in `.teams/active/`
+1. Read this AGENTS.md file
+2. Read the main project documentation in `docs/`
+3. Ensure all tests pass before making changes
+4. Check the GitHub Actions workflows in `.github/workflows/` for CI/CD patterns
 
 ### When Modifying Code
 
-- Add code comments: `// TEAM_XXX: Reason for change`
+- Add descriptive code comments explaining the reason for changes
 - Check project documentation for file dependencies
 - Update ALL affected files together
-- Follow existing style and patterns
+- Follow existing style and patterns in the codebase
 - Write general-purpose solutions
 
 ### When Finishing Work
 
-1. Mark todos as completed
-2. Update team file with progress
-3. Move team file to `.teams/completed/` if done
-4. Commit changes with descriptive message
-5. Push commits to remote
-6. Save final state to memory for continuity
+1. Ensure all tests pass
+2. Commit changes with descriptive message
+3. Push commits to remote
