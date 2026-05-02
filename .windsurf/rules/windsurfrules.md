@@ -113,7 +113,8 @@ Before coding: What is GOAL? What PRINCIPLES apply? How does this DIFFER from ge
 - After completing each feature, fix, or refactoring
 - After passing all relevant tests
 - Before marking a task as complete in todo list
-- After any substantial code change (>10 lines)
+- After any substantial code change (>30 lines OR 3+ files modified)
+- Small changes (≤30 lines and <3 files) should not be committed unless completing a task
 
 ### Commit Protocol
 1. Stage all relevant changes: `git add <files>`

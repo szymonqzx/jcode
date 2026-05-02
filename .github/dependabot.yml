@@ -9,9 +9,9 @@ updates:
       time: "09:00"
     open-pull-requests-limit: 10
     reviewers:
-      - "1jehuang"
+      - "szymonqzx"
     assignees:
-      - "1jehuang"
+      - "szymonqzx"
     labels:
       - "dependencies"
       - "rust"
