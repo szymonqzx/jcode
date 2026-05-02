@@ -36,7 +36,7 @@ jobs:
         with:
           arch: amd64
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
         with:
           targets: x86_64-pc-windows-msvc
 
@@ -167,7 +167,7 @@ jobs:
         with:
           arch: amd64_arm64
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
         with:
           targets: aarch64-pc-windows-msvc
 
