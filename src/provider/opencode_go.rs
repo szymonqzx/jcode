@@ -54,6 +54,13 @@ const DEFAULT_API_BASE: &str = "https://opencode.ai/zen/go/v1";
 const DEFAULT_MODEL: &str = "deepseek-v4-flash";
 const DEFAULT_MODEL: &str = "deepseek-v4-flash";
 
+const KNOWN_MODELS: &[&str] = &["deepseek-v4-flash", "THUDM/GLM-4.5"];
+
+pub(crate) fn is_known_model(model: &str) -> bool {
+    let normalized = model.trim();
+    KNOWN_MODELS.contains(&normalized)
+}
+
 pub struct OpenCodeGoProvider {
     client: Client,
     model: Arc<RwLock<String>>,
@@ -204,6 +211,10 @@ impl Provider for OpenCodeGoProvider {
     }
 
     fn available_models_display(&self) -> Vec<String> {
+        vec!["deepseek-v4-flash".to_string(), "THUDM/GLM-4.5".to_string()]
+    }
+
+    fn available_models_for_switching(&self) -> Vec<String> {
         vec!["deepseek-v4-flash".to_string(), "THUDM/GLM-4.5".to_string()]
     }
 

@@ -341,7 +341,7 @@ async fn ensure_persistent_ws_is_healthy(state: &mut PersistentWsState) -> Resul
 
     state
         .ws_stream
-        .send(WsMessage::Ping(Vec::new()))
+        .send(WsMessage::Ping(Vec::new().into()))
         .await
         .map_err(|err| format!("healthcheck ping send error: {}", err))?;
 

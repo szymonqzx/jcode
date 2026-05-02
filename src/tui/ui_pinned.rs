@@ -405,7 +405,7 @@ fn build_side_pane_snapshot_cache(
     lines: &[Line<'static>],
     inner_width: u16,
 ) -> SidePaneSnapshotCache {
-    let plain_lines: Vec<String> = lines.iter().map(super::line_plain_text).collect();
+    let plain_lines: Vec<String> = lines.iter().map(super::box_utils::line_plain_text).collect();
     let wrapped_line_map: Vec<WrappedLineMap> = plain_lines
         .iter()
         .enumerate()

@@ -136,7 +136,7 @@ fn render_assistant_tool_call_lines(
         spans.push(Span::styled(more_text, separator_style));
     }
 
-    let mut lines = vec![super::truncate_line_with_ellipsis_to_width(
+    let mut lines = vec![super::box_utils::truncate_line_with_ellipsis_to_width(
         &Line::from(spans),
         max_width,
     )];
@@ -144,7 +144,7 @@ fn render_assistant_tool_call_lines(
     if centered {
         left_pad_lines_for_centered_mode(&mut lines, width as u16);
         if let Some(line) = lines.first_mut() {
-            *line = super::truncate_line_with_ellipsis_to_width(line, max_width);
+            *line = super::box_utils::truncate_line_with_ellipsis_to_width(line, max_width);
         }
     }
 
@@ -870,7 +870,7 @@ fn render_compact_progress_line(
     text_style: Style,
 ) -> Line<'static> {
     let Some(percent) = progress.percent else {
-        return super::truncate_line_with_ellipsis_to_width(
+        return super::box_utils::truncate_line_with_ellipsis_to_width(
             &Line::from(Span::styled(progress.summary.clone(), text_style)),
             inner_width,
         );
@@ -904,7 +904,7 @@ fn render_compact_progress_line(
         Span::styled(summary.to_string(), text_style),
     ]);
 
-    super::truncate_line_with_ellipsis_to_width(&line, inner_width)
+    super::box_utils::truncate_line_with_ellipsis_to_width(&line, inner_width)
 }
 
 fn render_background_task_progress_message(
@@ -944,7 +944,7 @@ fn render_background_task_progress_message(
         "Latest status: bg action=\"status\" task_id=\"{}\"",
         progress.task_id
     );
-    box_content.push(super::truncate_line_with_ellipsis_to_width(
+    box_content.push(super::box_utils::truncate_line_with_ellipsis_to_width(
         &Line::from(Span::styled(hint, label_style)),
         inner_width,
     ));
@@ -1226,7 +1226,7 @@ pub(crate) fn render_tool_message(
             .as_deref()
             .filter(|title| !title.trim().is_empty())
             .map(|title| {
-                super::line_plain_text(&super::truncate_line_with_ellipsis_to_width(
+                super::box_utils::line_plain_text(&super::box_utils::truncate_line_with_ellipsis_to_width(
                     &Line::from(title.to_string()),
                     technical_summary_width,
                 ))
@@ -1276,7 +1276,7 @@ pub(crate) fn render_tool_message(
         Span::styled(token_badge.label, Style::default().fg(token_badge.color)),
     ]);
 
-    lines.push(super::truncate_line_preserving_suffix_to_width(
+    lines.push(super::box_utils::truncate_line_preserving_suffix_to_width(
         &Line::from(tool_line),
         &token_suffix,
         row_width,

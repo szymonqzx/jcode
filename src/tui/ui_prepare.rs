@@ -242,7 +242,7 @@ fn prepare_active_batch_progress(
             Style::default().fg(dim_color()),
         ));
     }
-    lines.push(super::truncate_line_with_ellipsis_to_width(
+    lines.push(super::box_utils::truncate_line_with_ellipsis_to_width(
         &Line::from(header),
         width.saturating_sub(1) as usize,
     ));

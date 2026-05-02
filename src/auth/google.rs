@@ -263,16 +263,18 @@ async fn exchange_code(
     tier: GmailAccessTier,
 ) -> Result<GoogleTokens> {
     let client = reqwest::Client::new();
+    let form_data = [
+        ("grant_type", "authorization_code"),
+        ("client_id", &creds.client_id),
+        ("client_secret", &creds.client_secret),
+        ("code", code),
+        ("code_verifier", verifier),
+        ("redirect_uri", redirect_uri),
+    ];
     let resp = client
         .post(TOKEN_URL)
-        .form(&[
-            ("grant_type", "authorization_code"),
-            ("client_id", &creds.client_id),
-            ("client_secret", &creds.client_secret),
-            ("code", code),
-            ("code_verifier", verifier),
-            ("redirect_uri", redirect_uri),
-        ])
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(urlencoding::encode(&form_data.iter().map(|(k, v)| format!("{}={}", k, v)).collect::<Vec<_>>().join("&")).to_string())
         .send()
         .await?;
 
@@ -314,14 +316,16 @@ pub async fn refresh_tokens(tokens: &GoogleTokens) -> Result<GoogleTokens> {
         let creds = load_credentials()?;
         let client = reqwest::Client::new();
 
+        let form_data = [
+            ("grant_type", "refresh_token"),
+            ("client_id", &creds.client_id),
+            ("client_secret", &creds.client_secret),
+            ("refresh_token", &tokens.refresh_token),
+        ];
         let resp = client
             .post(TOKEN_URL)
-            .form(&[
-                ("grant_type", "refresh_token"),
-                ("client_id", &creds.client_id),
-                ("client_secret", &creds.client_secret),
-                ("refresh_token", &tokens.refresh_token),
-            ])
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(urlencoding::encode(&form_data.iter().map(|(k, v)| format!("{}={}", k, v)).collect::<Vec<_>>().join("&")).to_string())
             .send()
             .await?;
 
