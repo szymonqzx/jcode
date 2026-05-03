@@ -153,7 +153,7 @@ fn build_chat_request(
     api_key: &str,
     _version: &str,
     model_enum: i32,
-    messages: &[Message],
+    messages: &[ChatMessage],
     model_name: &str,
     system_prompt: Option<&str>,
 ) -> Result<Vec<u8>> {
@@ -409,7 +409,7 @@ impl WindsurfProvider {
 impl Provider for WindsurfProvider {
     async fn complete(
         &self,
-        messages: &[Message],
+        messages: &[ChatMessage],
         tools: &[ToolDefinition],
         system: &str,
         _resume_session_id: Option<&str>,
