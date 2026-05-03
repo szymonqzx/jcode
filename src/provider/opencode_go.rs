@@ -70,7 +70,7 @@ impl OpenCodeGoProvider {
         Self {
             client: crate::provider::shared_http_client(),
             model: Arc::new(RwLock::new(model)),
-            api_base: crate::provider_catalog::normalize_api_base(&api_base).unwrap_or_else(|_| {
+            api_base: crate::provider_catalog::normalize_api_base(&api_base).unwrap_or_else(|| {
                 crate::logging::warn(&format!("Failed to normalize API base '{}', using default: {}", api_base, DEFAULT_API_BASE));
                 DEFAULT_API_BASE.to_string()
             }),

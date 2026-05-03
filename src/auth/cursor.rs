@@ -332,7 +332,16 @@ pub fn cursor_auth_file_path() -> Result<PathBuf> {
         let app_data = std::env::var("APPDATA")
             .map(|p| PathBuf::from(p).join("Cursor"))
             .unwrap_or_else(|_| {
-                let fallback = crate::storage::user_home_path("AppData/Roaming/Cursor");
+                let fallback = match crate::storage::user_home_path("AppData/Roaming/Cursor") {
+                    Ok(p) => p,
+                    Err(err) => {
+                        crate::logging::warn(&format!(
+                            "Failed to get Cursor auth path: {}. Using fallback.",
+                            err
+                        ));
+                        PathBuf::from("C:/Users/Default/AppData/Roaming/Cursor")
+                    }
+                };
                 // Validate the fallback path exists before using it
                 if fallback.exists() {
                     fallback

@@ -11,7 +11,16 @@ pub fn status_path() -> Result<PathBuf> {
 }
 
 pub fn load_all() -> HashMap<String, ProviderValidationRecord> {
-    let path = status_path();
+    let path = match status_path() {
+        Ok(p) => p,
+        Err(err) => {
+            crate::logging::warn(&format!(
+                "Failed to get validation status file path: {}. Using empty map.",
+                err
+            ));
+            return HashMap::new();
+        }
+    };
     match std::fs::read_to_string(&path) {
         Ok(content) => {
             match serde_json::from_str::<HashMap<String, ProviderValidationRecord>>(&content) {
@@ -19,7 +28,7 @@ pub fn load_all() -> HashMap<String, ProviderValidationRecord> {
                 Err(err) => {
                     crate::logging::warn(&format!(
                         "Failed to parse validation status file at {}: {}. Using empty map.",
-                        path,
+                        path.display(),
                         err
                     ));
                     HashMap::new()
@@ -29,7 +38,7 @@ pub fn load_all() -> HashMap<String, ProviderValidationRecord> {
         Err(err) => {
             crate::logging::warn(&format!(
                 "Failed to read validation status file at {}: {}. Using empty map.",
-                path,
+                path.display(),
                 err
             ));
             HashMap::new()
