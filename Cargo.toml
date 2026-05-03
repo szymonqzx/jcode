@@ -177,7 +177,26 @@ agentgrep = { git = "https://github.com/1jehuang/agentgrep.git", tag = "v0.1.2" 
 qr2term = "0.3.3"
 
 [features]
-default = ["embeddings", "pdf", "tui"]
+# =============================================================================
+# Feature Profiles for Build Speed
+# =============================================================================
+# Use these for faster iteration during development:
+#   - light:    Core only, fastest builds (cargo build --features light)
+#   - standard: Core + essential TUI, good for UI work (cargo build --features standard)
+#   - full:     Everything including embeddings/PDF (default)
+#
+default = ["full"]
+
+# Core functionality only - fastest builds for testing business logic
+light = []
+
+# Core + essential TUI - good balance for UI development
+standard = ["tui"]
+
+# Full functionality including heavy dependencies
+full = ["embeddings", "pdf", "tui"]
+
+# Individual feature flags
 jemalloc = [
     "dep:tikv-jemallocator",
     "dep:tikv-jemalloc-ctl",

@@ -2756,6 +2756,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "jcode-base-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "jcode-batch-types"
 version = "0.1.0"
 dependencies = [
@@ -2950,7 +2958,7 @@ name = "jcode-session-types"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "jcode-message-types",
+ "jcode-base-types",
  "serde",
 ]
 
@@ -3037,6 +3045,16 @@ name = "jcode-usage-types"
 version = "0.1.0"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "jcode-workflow-types"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "jcode-base-types",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
