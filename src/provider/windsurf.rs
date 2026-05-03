@@ -388,19 +388,19 @@ impl WindsurfProvider {
 
     /// Get the current model
     pub fn model(&self) -> String {
-        recover_rwlock_read(&self.model, |guard| guard, "windsurf", "model read")
+        recover_rwlock_read(&self.model, |guard| guard.to_string(), "windsurf", "model read")
     }
 
     /// Set the model
     pub fn set_model(&self, model: String) {
-        *recover_rwlock_write(&self.model, |guard| guard, "windsurf", "model write") = model;
+        recover_rwlock_write(&self.model, |guard| *guard = model, "windsurf", "model write");
     }
 
     /// Refresh credentials from disk
     pub fn refresh_credentials(&self) -> Result<()> {
         let new_creds = windsurf_auth::load_credentials()
             .context("Failed to refresh Windsurf credentials")?;
-        *recover_rwlock_write(&self.credentials, |guard| guard, "windsurf", "credentials write") = new_creds;
+        recover_rwlock_write(&self.credentials, |guard| *guard = new_creds, "windsurf", "credentials write");
         Ok(())
     }
 }
@@ -417,7 +417,7 @@ impl Provider for WindsurfProvider {
         let (tx, rx) = mpsc::channel(100);
 
         // Clone credentials and messages for the async task
-        let credentials = recover_rwlock_read(&self.credentials, |guard| guard, "windsurf", "credentials read");
+        let credentials = recover_rwlock_read(&self.credentials, |guard| guard.clone(), "windsurf", "credentials read");
         let model = self.model();
         let messages = messages.to_vec();
         let system = system.to_string();
@@ -425,11 +425,23 @@ impl Provider for WindsurfProvider {
 
         tokio::spawn(async move {
             // Build gRPC request with protobuf encoding
-            let model_enum = resolve_model_enum(&model)
-                .map_err(|e| anyhow::anyhow!("Failed to resolve Windsurf model: {}", e))?;
+            let model_enum = match resolve_model_enum(&model) {
+                Ok(m) => m,
+                Err(e) => {
+                    let error_msg = anyhow::anyhow!("Failed to resolve Windsurf model: {}", e);
+                    let _ = tx.send(Err(error_msg)).await;
+                    return;
+                }
+            };
             let model_name = &model;
-            let api_key = credentials.api_key.as_deref()
-                .ok_or_else(|| anyhow::anyhow!("Windsurf API key not found. Please login to Windsurf first."))?;
+            let api_key = match credentials.api_key.as_deref() {
+                Some(k) => k,
+                None => {
+                    let error_msg = anyhow::anyhow!("Windsurf API key not found. Please login to Windsurf first.");
+                    let _ = tx.send(Err(error_msg)).await;
+                    return;
+                }
+            };
             let version = &credentials.version;
 
             // Build tool-calling prompt if tools are provided
@@ -575,7 +587,7 @@ impl Provider for WindsurfProvider {
     }
 
     fn set_model(&self, model: &str) -> anyhow::Result<()> {
-        *recover_rwlock_write(&self.model, |guard| guard, "windsurf", "model write") = model.to_string();
+        recover_rwlock_write(&self.model, |guard| *guard = model.to_string(), "windsurf", "model write");
         Ok(())
     }
 

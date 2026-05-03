@@ -67,12 +67,12 @@ tikv-jemalloc-ctl = { version = "0.6", optional = true }
 tikv-jemalloc-sys = { version = "0.6", optional = true }
 
 # Async runtime
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net", "time", "process", "sync", "fs"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net", "time", "process", "sync", "fs", "signal"] }
 futures = "0.3"
 async-trait = "0.1"
 
 # HTTP client
-reqwest = { version = "0.13", features = ["json", "stream"] }
+reqwest = { version = "0.13", features = ["json", "stream", "form"] }
 tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "rustls-tls-native-roots"] }
 
 # Serialization
@@ -97,6 +97,7 @@ libc = "0.2"             # Unix system calls (flock)
 chrono = { version = "0.4", features = ["serde"] }
 regex = "1"
 uuid = { version = "1", features = ["v4", "v5"] }
+prost = "0.13"          # Protocol buffers for windsurf provider
 
 # Embeddings (local inference) - behind feature flag (163 crates, slow to compile)
 jcode-embedding = { path = "crates/jcode-embedding", optional = true }
@@ -123,6 +124,7 @@ jcode-provider-openrouter = { path = "crates/jcode-provider-openrouter" }
 jcode-provider-gemini = { path = "crates/jcode-provider-gemini" }
 jcode-tui-markdown = { path = "crates/jcode-tui-markdown" }
 jcode-tui-core = { path = "crates/jcode-tui-core" }
+jcode-tui-mermaid = { path = "crates/jcode-tui-mermaid" }
 jcode-tui-render = { path = "crates/jcode-tui-render", optional = true }
 jcode-terminal-launch = { path = "crates/jcode-terminal-launch" }
 jcode-tui-workspace = { path = "crates/jcode-tui-workspace" }
@@ -232,10 +234,23 @@ opt-level = 1
 incremental = true
 codegen-units = 256
 split-debuginfo = "off"
+panic = "abort"
 
 [profile.dev.package."*"]
 opt-level = 1
 codegen-units = 256
+
+[profile.dev.build-override]
+opt-level = 3
+codegen-units = 16
+
+# Fast dev profile for even quicker iteration during development
+# Use with: cargo build --profile fast-dev
+[profile.fast-dev]
+inherits = "dev"
+opt-level = 0
+codegen-units = 512
+panic = "abort"
 
 [profile.test]
 debug = 0

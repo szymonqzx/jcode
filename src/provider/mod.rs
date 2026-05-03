@@ -1856,6 +1856,7 @@ impl Provider for MultiProvider {
                 .unwrap_or(false),
             ActiveProvider::Windsurf => false,
             ActiveProvider::OpenRouter => false, // jcode executes tools
+            ActiveProvider::OpenCodeGo => false,
         }
     }
 
@@ -1869,6 +1870,7 @@ impl Provider for MultiProvider {
             ActiveProvider::Cursor => None,
             ActiveProvider::Windsurf => None,
             ActiveProvider::OpenRouter => None,
+            ActiveProvider::OpenCodeGo => None,
         }
     }
 
@@ -1886,6 +1888,7 @@ impl Provider for MultiProvider {
 
     fn available_efforts(&self) -> Vec<&'static str> {
         match self.active_provider() {
+            ActiveProvider::Claude => vec![],
             ActiveProvider::OpenAI => self
                 .openai_provider()
                 .map(|o| o.available_efforts())
@@ -1895,7 +1898,8 @@ impl Provider for MultiProvider {
             ActiveProvider::Gemini => vec![],
             ActiveProvider::Cursor => vec![],
             ActiveProvider::Windsurf => vec![],
-            _ => vec![],
+            ActiveProvider::OpenRouter => vec![],
+            ActiveProvider::OpenCodeGo => vec![],
         }
     }
 
@@ -1906,18 +1910,6 @@ impl Provider for MultiProvider {
         }
     }
 
-    fn set_service_tier(&self, service_tier: &str) -> Result<()> {
-        match self.active_provider() {
-            ActiveProvider::OpenAI => self
-                .openai_provider()
-                .ok_or_else(|| anyhow::anyhow!("OpenAI provider not available"))?
-                .set_service_tier(service_tier),
-            _ => Err(anyhow::anyhow!(
-                "Service tier switching is only supported for OpenAI models"
-            )),
-        }
-    }
-
     fn available_service_tiers(&self) -> Vec<&'static str> {
         match self.active_provider() {
             ActiveProvider::OpenAI => self
@@ -1925,24 +1917,6 @@ impl Provider for MultiProvider {
                 .map(|o| o.available_service_tiers())
                 .unwrap_or_default(),
             _ => vec![],
-        }
-    }
-
-    fn native_compaction_mode(&self) -> Option<String> {
-        match self.active_provider() {
-            ActiveProvider::OpenAI => self
-                .openai_provider()
-                .and_then(|o| o.native_compaction_mode()),
-            _ => None,
-        }
-    }
-
-    fn native_compaction_threshold_tokens(&self) -> Option<usize> {
-        match self.active_provider() {
-            ActiveProvider::OpenAI => self
-                .openai_provider()
-                .and_then(|o| o.native_compaction_threshold_tokens()),
-            _ => None,
         }
     }
 
@@ -1967,6 +1941,9 @@ impl Provider for MultiProvider {
 
     fn available_transports(&self) -> Vec<&'static str> {
         match self.active_provider() {
+            ActiveProvider::Claude => vec![],
+            ActiveProvider::Copilot => vec![],
+            ActiveProvider::Antigravity => vec![],
             ActiveProvider::OpenAI => self
                 .openai_provider()
                 .map(|o| o.available_transports())
@@ -1974,7 +1951,8 @@ impl Provider for MultiProvider {
             ActiveProvider::Gemini => vec![],
             ActiveProvider::Cursor => vec![],
             ActiveProvider::Windsurf => vec![],
-            _ => vec![],
+            ActiveProvider::OpenRouter => vec![],
+            ActiveProvider::OpenCodeGo => vec![],
         }
     }
 
@@ -2014,6 +1992,7 @@ impl Provider for MultiProvider {
                 .openrouter_provider()
                 .map(|o| o.supports_compaction())
                 .unwrap_or(false),
+            ActiveProvider::OpenCodeGo => false,
         }
     }
 
@@ -2053,6 +2032,7 @@ impl Provider for MultiProvider {
                 .openrouter_provider()
                 .map(|o| o.uses_jcode_compaction())
                 .unwrap_or(false),
+            ActiveProvider::OpenCodeGo => false,
         }
     }
 
@@ -2159,6 +2139,9 @@ impl Provider for MultiProvider {
                     Err(anyhow::anyhow!("OpenRouter provider unavailable"))
                 }
             }
+            ActiveProvider::OpenCodeGo => Err(anyhow::anyhow!(
+                "OpenCodeGo does not support native compaction"
+            )),
         }
     }
 
@@ -2221,6 +2204,7 @@ impl Provider for MultiProvider {
                 .openrouter_provider()
                 .map(|o| o.context_window())
                 .unwrap_or(DEFAULT_CONTEXT_LIMIT),
+            ActiveProvider::OpenCodeGo => DEFAULT_CONTEXT_LIMIT,
         }
     }
 
@@ -2304,6 +2288,7 @@ impl Provider for MultiProvider {
             cursor: RwLock::new(cursor_provider),
             windsurf: RwLock::new(windsurf),
             openrouter: RwLock::new(openrouter),
+            opencode_go: RwLock::new(None),
             active: RwLock::new(active),
             use_claude_cli: self.use_claude_cli,
             startup_notices: RwLock::new(Vec::new()),
@@ -2344,6 +2329,7 @@ impl Provider for MultiProvider {
             ActiveProvider::Cursor => None,
             ActiveProvider::Windsurf => None,
             ActiveProvider::OpenRouter => None,
+            ActiveProvider::OpenCodeGo => None,
         }
     }
 

@@ -375,7 +375,7 @@ fn platform_adapt_selfdev_prompt(prompt: &str) -> String {
         prompt
             .replace("scripts/dev_cargo.sh", "cargo")
             .replace("`scripts/dev_cargo.sh`", "`cargo`")
-            .replace("Unix/Linux/macOS: `scripts/dev_cargo.sh`", "Windows (use `cargo build` directly ensuring that binary will be in user\.jcode\builds)")
+            .replace("Unix/Linux/macOS: `scripts/dev_cargo.sh`", r"Windows (use `cargo build` directly ensuring that binary will be in user\.jcode\builds)")
             .replace("Unix/Linux/macOS", "Windows")
             .replace("scripts/dev_cargo.ps1", "cargo")
     } else {

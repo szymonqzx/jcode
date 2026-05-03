@@ -98,7 +98,7 @@ impl OpenCodeGoProvider {
         let openai_messages = build_openai_messages(messages, system)?;
         let openai_tools = build_tools(tools);
 
-        let model = recover_rwlock_read(&self.model, |guard| guard, "opencode-go", "model read");
+        let model = recover_rwlock_read(&self.model, |guard| guard.to_string(), "opencode-go", "model read");
         let mut request_body = serde_json::json!({
             "model": model,
             "messages": openai_messages,
@@ -167,12 +167,12 @@ impl Provider for OpenCodeGoProvider {
         recover_rwlock_read(&self.model, |guard| guard, "opencode-go", "model read")
     }
 
-    fn set_model(&self, model: &str) -> Result<()> {
+    fn set_model(&self, model: &str) -> anyhow::Result<()> {
         let trimmed = model.trim();
         if trimmed.is_empty() {
             anyhow::bail!("OpenCode Go model cannot be empty");
         }
-        *recover_rwlock_write(&self.model, |guard| guard, "opencode-go", "model write") = trimmed.to_string();
+        recover_rwlock_write(&self.model, |guard| *guard = trimmed.to_string(), "opencode-go", "model write");
         Ok(())
     }
 
@@ -337,7 +337,7 @@ fn build_openai_messages(messages: &[Message], system: &str) -> Result<Vec<Value
                 // Multiple non-tool blocks (text/reasoning)
                 serde_json::json!(non_tool_blocks
                     .iter()
-                    .map(|block| match block {
+                    .map(|block| Ok(match block {
                         ContentBlock::Text { text, .. } => serde_json::json!({
                             "type": "text",
                             "text": text
@@ -347,8 +347,8 @@ fn build_openai_messages(messages: &[Message], system: &str) -> Result<Vec<Value
                             "text": text
                         }),
                         _ => anyhow::bail!("Unsupported content block type in multi-block message: {:?}", block),
-                    })
-                    .collect::<Vec<_>>())
+                    }))
+                    .collect::<Result<Vec<_>, _>>()?)
             }
         };
 
@@ -447,11 +447,15 @@ async fn convert_openai_stream_to_anthropic(
                                             // Send accumulated tool calls when stream finishes
                                             if !partial_tool_calls.is_empty() {
                                                 for (id, (name, arguments)) in partial_tool_calls.drain() {
-                                                    if tx.send(Ok(StreamEvent::ToolUse {
-                                                        id,
-                                                        name,
-                                                        input: arguments,
-                                                    })).await.is_err() {
+                                                    if tx.send(Ok(StreamEvent::ToolUseStart { id, name })).await.is_err() {
+                                                        return;
+                                                    }
+                                                    if !arguments.is_empty() {
+                                                        if tx.send(Ok(StreamEvent::ToolInputDelta(arguments))).await.is_err() {
+                                                            return;
+                                                        }
+                                                    }
+                                                    if tx.send(Ok(StreamEvent::ToolUseEnd)).await.is_err() {
                                                         return;
                                                     }
                                                 }
