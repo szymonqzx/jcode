@@ -1783,15 +1783,34 @@ impl Provider for MultiProvider {
         }
 
         let already_has_windsurf = self.windsurf_provider().is_some();
-        if !already_has_windsurf
-            && windsurf::WindsurfProvider::new("swe-1.6".to_string()).is_ok()
-        {
-            crate::logging::info("Hot-initialized Windsurf provider after login");
-            *self
-                .windsurf
-                .write()
-                .unwrap_or_else(|poisoned| poisoned.into_inner()) =
-                Some(Arc::new(windsurf::WindsurfProvider::new("swe-1.6".to_string()).unwrap()));
+        if !already_has_windsurf {
+            if let Ok(provider) = windsurf::WindsurfProvider::new("swe-1.6".to_string()) {
+                crate::logging::info("Hot-initialized Windsurf provider after login");
+                *self
+                    .windsurf
+                    .write()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Arc::new(provider));
+            }
+        }
+
+        let already_has_opencode_go = self.opencode_go_provider().is_some();
+        if !already_has_opencode_go && opencode_go::OpenCodeGoProvider::configured() {
+            match opencode_go::OpenCodeGoProvider::from_profile() {
+                Ok(provider) => {
+                    crate::logging::info("Hot-initialized OpenCode Go provider after login");
+                    *self
+                        .opencode_go
+                        .write()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+                        Some(Arc::new(provider));
+                }
+                Err(e) => {
+                    crate::logging::info(&format!(
+                        "Failed to hot-initialize OpenCode Go provider after auth change: {}",
+                        e
+                    ));
+                }
+            }
         }
         if let Some(anthropic) = self.anthropic_provider() {
             Self::spawn_post_auth_model_refresh(anthropic, "Anthropic");
@@ -1816,6 +1835,9 @@ impl Provider for MultiProvider {
         }
         if let Some(openrouter) = self.openrouter_provider() {
             Self::spawn_post_auth_model_refresh(openrouter, "OpenRouter");
+        }
+        if let Some(opencode_go) = self.opencode_go_provider() {
+            Self::spawn_post_auth_model_refresh(opencode_go, "OpenCodeGo");
         }
     }
 

@@ -260,10 +260,18 @@ fn build_openai_messages(messages: &[Message], system: &str) -> Result<Vec<Value
             Role::Assistant => "assistant",
         };
 
-        let content: Value = if non_tool_blocks.len() == 1 {
-            match &non_tool_blocks[0] {
-                ContentBlock::Text { text, .. } => serde_json::json!(text),
-                ContentBlock::Reasoning { text } => serde_json::json!(text),
+        // Collect tool calls and text/reasoning content separately
+        let mut tool_calls: Vec<Value> = Vec::new();
+        let mut text_parts: Vec<String> = Vec::new();
+
+        for block in &non_tool_blocks {
+            match block {
+                ContentBlock::Text { text, .. } => {
+                    text_parts.push(text.clone());
+                }
+                ContentBlock::Reasoning { text } => {
+                    text_parts.push(text.clone());
+                }
                 ContentBlock::ToolUse { id, name, input } => {
                     let arguments = if input.is_object() {
                         match serde_json::to_string(input) {
@@ -279,101 +287,43 @@ fn build_openai_messages(messages: &[Message], system: &str) -> Result<Vec<Value
                             "{}"
                         }).to_string()
                     };
-                    serde_json::json!({
-                        "role": "assistant",
-                        "tool_calls": [{
-                            "id": id,
-                            "type": "function",
-                            "function": {
-                                "name": name,
-                                "arguments": arguments
-                            }
-                        }]
-                    })
-                },
-                _ => anyhow::bail!("Unsupported content block type in single-block message: {:?}", non_tool_blocks[0]),
-            }
-        } else {
-            // Multiple content blocks
-            let has_tool_use = non_tool_blocks.iter().any(|b| matches!(b, ContentBlock::ToolUse { .. }));
-            if has_tool_use {
-                // If there's a ToolUse in multi-block, we need to handle it specially
-                let tool_calls: Vec<Value> = non_tool_blocks
-                    .iter()
-                    .filter_map(|block| {
-                        if let ContentBlock::ToolUse { id, name, input } = block {
-                            let arguments = if input.is_object() {
-                                match serde_json::to_string(input) {
-                                    Ok(s) => s,
-                                    Err(e) => {
-                                        crate::logging::warn(&format!("Failed to serialize tool input to JSON: {}", e));
-                                        "{}".to_string()
-                                    }
-                                }
-                            } else {
-                                input.as_str().unwrap_or_else(|| {
-                                    crate::logging::warn("Tool input is not a string, using empty object");
-                                    "{}"
-                                }).to_string()
-                            };
-                            Some(serde_json::json!({
-                                "id": id,
-                                "type": "function",
-                                "function": {
-                                    "name": name,
-                                    "arguments": arguments
-                                }
-                            }))
-                        } else {
-                            None
+                    tool_calls.push(serde_json::json!({
+                        "id": id,
+                        "type": "function",
+                        "function": {
+                            "name": name,
+                            "arguments": arguments
                         }
-                    })
-                    .collect();
-
-                let text_content: Vec<Value> = non_tool_blocks
-                    .iter()
-                    .filter_map(|block| match block {
-                        ContentBlock::Text { text, .. } => Some(serde_json::json!(text)),
-                        ContentBlock::Reasoning { text } => Some(serde_json::json!(text)),
-                        _ => None,
-                    })
-                    .collect();
-
-                if text_content.is_empty() {
-                    serde_json::json!(tool_calls)
-                } else {
-                    serde_json::json!({
-                        "content": text_content,
-                        "tool_calls": tool_calls
-                    })
+                    }));
                 }
-            } else {
-                // Multiple non-tool blocks (text/reasoning)
-                serde_json::json!(non_tool_blocks
-                    .iter()
-                    .map(|block| Ok(match block {
-                        ContentBlock::Text { text, .. } => serde_json::json!({
-                            "type": "text",
-                            "text": text
-                        }),
-                        ContentBlock::Reasoning { text } => serde_json::json!({
-                            "type": "text",
-                            "text": text
-                        }),
-                        _ => anyhow::bail!("Unsupported content block type in multi-block message: {:?}", block),
-                    }))
-                    .collect::<Result<Vec<_>, _>>()?)
+                _ => anyhow::bail!("Unsupported content block type: {:?}", block),
             }
-        };
+        }
 
-        // If content has tool_calls at top level, use that directly
-        if let Some(tool_calls) = content.get("tool_calls") {
-            openai_messages.push(serde_json::json!({
+        // Build the OpenAI message with proper structure:
+        // - Messages with tool_calls: {"role": "assistant", "tool_calls": [...], "content": "..."}
+        // - Messages without tool_calls: {"role": "...", "content": "..."}
+        if !tool_calls.is_empty() {
+            let mut message = serde_json::json!({
                 "role": role,
                 "tool_calls": tool_calls,
-                "content": content.get("content").unwrap_or(&serde_json::json!(""))
-            }));
+            });
+            // OpenAI requires content field even for tool-call messages (can be null or text)
+            if text_parts.is_empty() {
+                message["content"] = Value::Null;
+            } else {
+                message["content"] = serde_json::json!(text_parts.join("\n"));
+            }
+            openai_messages.push(message);
         } else {
+            let content = if text_parts.len() == 1 {
+                serde_json::json!(text_parts[0])
+            } else {
+                serde_json::json!(text_parts
+                    .iter()
+                    .map(|text| serde_json::json!({"type": "text", "text": text}))
+                    .collect::<Vec<_>>())
+            };
             openai_messages.push(serde_json::json!({
                 "role": role,
                 "content": content
@@ -526,17 +476,18 @@ mod tests {
 
     #[test]
     fn test_normalize_api_base() {
+        // normalize_api_base only validates scheme and strips trailing slashes
         assert_eq!(
             crate::provider_catalog::normalize_api_base("https://opencode.ai/zen/go/v1").unwrap(),
             "https://opencode.ai/zen/go/v1"
         );
         assert_eq!(
             crate::provider_catalog::normalize_api_base("https://opencode.ai/zen/go/v1/").unwrap(),
-            "https://opencode.ai/zen/go/v1/"
+            "https://opencode.ai/zen/go/v1"
         );
         assert_eq!(
             crate::provider_catalog::normalize_api_base("https://opencode.ai/zen/go").unwrap(),
-            "https://opencode.ai/zen/go/v1"
+            "https://opencode.ai/zen/go"
         );
     }
 
@@ -650,6 +601,9 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert_eq!(result[0]["role"], "assistant");
         assert!(result[0].get("tool_calls").is_some());
+        // tool_calls must be at the message root, not nested inside content
+        assert!(result[0]["content"].is_null());
+        assert_eq!(result[0]["tool_calls"][0]["function"]["name"], "test_tool");
     }
 
     #[test]

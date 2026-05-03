@@ -23,7 +23,11 @@ use uuid::Uuid;
 /// Available Windsurf models
 pub(crate) const AVAILABLE_MODELS: &[&str] = &[
     "swe-1.5",
+    "swe-1.5-thinking",
+    "swe-1.5-slow",
     "swe-1.6",
+    "kimi-k2",
+    "kimi-k2-thinking",
     "kimi-k2.5",
     "kimi-k2.6",
 ];
@@ -648,7 +652,11 @@ mod tests {
     fn test_available_models() {
         assert!(!AVAILABLE_MODELS.is_empty());
         assert!(AVAILABLE_MODELS.contains(&"swe-1.5"));
+        assert!(AVAILABLE_MODELS.contains(&"swe-1.5-thinking"));
+        assert!(AVAILABLE_MODELS.contains(&"swe-1.5-slow"));
         assert!(AVAILABLE_MODELS.contains(&"swe-1.6"));
+        assert!(AVAILABLE_MODELS.contains(&"kimi-k2"));
+        assert!(AVAILABLE_MODELS.contains(&"kimi-k2-thinking"));
         assert!(AVAILABLE_MODELS.contains(&"kimi-k2.5"));
         assert!(AVAILABLE_MODELS.contains(&"kimi-k2.6"));
     }
