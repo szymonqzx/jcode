@@ -1,6 +1,7 @@
 ---
-status: active
+status: completed
 created: 2026-05-03
+completed: 2026-05-03
 ---
 
 # TEAM_001 - Build Time Optimization
@@ -15,24 +16,33 @@ Implement crate seam refactoring to improve jcode project build times through:
 ## Progress
 - [x] Team registration
 - [x] Baseline build verification
-- [ ] Phase 1: Document sccache + optimize fast-dev profile
-- [ ] Phase 2: Consolidate types crates
-- [ ] Phase 3: Create feature unions
-- [ ] Phase 4: Evaluate binary split (if needed)
-- [ ] Final verification and commit
+- [x] Phase 1: Document sccache + optimize fast-dev profile
+- [x] Phase 2: Consolidate types crates (13→4)
+- [x] Phase 3: Create feature unions (light/standard/full)
+- [x] Phase 4: Evaluate binary split (documented)
+- [x] Final verification and commit
+- [x] All consolidated crates build successfully
 
-## Decisions
-- **Types crate grouping strategy:**
-  - `jcode-base-types`: Core types (message, session, memory, config)
-  - `jcode-task-types`: Task/plan/batch related types
-  - `jcode-ui-types`: UI/TUI/side-panel related types
-  
-- **Feature profiles:**
-  - `light`: Core functionality, no TUI/embeddings/PDF
-  - `standard`: Core + essential TUI (default for dev)
-  - `full`: Everything (current default)
+## Final Crate Consolidation (13→4)
 
-- **Keep jcode-core separate**: It's already a lean foundation crate
+**New consolidated crates:**
+- `jcode-base-types`: message, auth, config, gateway, background, side-panel, usage
+- `jcode-session-types`: session, memory (expanded existing crate)
+- `jcode-workflow-types`: task, ambient, batch
+- `jcode-selfdev-types`: kept separate (requires chrono + anyhow)
+
+**Feature profiles added:**
+- `light`: Core only, fastest builds for testing business logic
+- `standard`: Core + essential TUI, good for UI work
+- `full`: Everything including embeddings/PDF (default)
+
+**Build tooling:**
+- Updated `.cargo/config.toml` with clearer sccache documentation
+- `fast-dev` profile already exists with 512 codegen units
 
 ## Handoff Notes
-N/A - active task
+Task completed. Legacy types crates remain in workspace for backward compatibility during migration period. Future work could migrate dependent crates to use consolidated types directly, then remove legacy crates.
+
+**Commits:**
+- d4ffdb5b: Consolidate types crates
+- d4fdbd75: Add feature profiles
