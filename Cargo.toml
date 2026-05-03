@@ -36,7 +36,6 @@ members = [
     "crates/jcode-tui-mermaid",
     "crates/jcode-task-types",
     "crates/jcode-tui-render",
-    "crates/jcode-task-types",
     "crates/jcode-terminal-launch",
     "crates/jcode-tui-workspace",
     "crates/jcode-mobile-core",
