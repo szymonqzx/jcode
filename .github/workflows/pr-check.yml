@@ -1,10 +1,8 @@
-name: Remote Build
+name: PR Check
 
 on:
-  push:
-    branches:
-      - master
-    # Skip builds for documentation-only changes
+  pull_request:
+    # Skip checks for documentation-only changes
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -12,14 +10,14 @@ on:
   workflow_dispatch:
 
 jobs:
-  native-build:
-    name: Native build (${{ matrix.os }})
+  pr-check:
+    name: PR Check (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-    timeout-minutes: 30
+    timeout-minutes: 20
     env:
       SCCACHE_GHA_ENABLED: true
       RUSTC_WRAPPER: sccache
@@ -36,8 +34,11 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Check GUI crate (fail fast)
-        run: cargo check -p jcode-gui
+      - name: Check all crates
+        run: cargo check --all-targets
 
-      - name: Build core binary
-        run: cargo build --release --bin jcode
+      - name: Run tests
+        run: cargo test --all-targets
+
+      - name: Check GUI crate
+        run: cargo check -p jcode-gui
