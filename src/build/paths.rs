@@ -167,6 +167,7 @@ pub fn selfdev_build_command_for_target(
 
     // Note: wrapper.is_file() branch removed as unreachable code
 
+    #[allow(unreachable_code)]
     let command = display_build_command_with_profile("cargo", &specs, profile);
     SelfDevBuildCommand {
         program: "bash".to_string(),

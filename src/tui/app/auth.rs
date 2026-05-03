@@ -280,7 +280,6 @@ impl App {
         use sha2::{Digest, Sha256};
 
         let verifier: String = {
-            use rand::Rng;
             const CHARSET: &[u8] =
                 b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
             let mut rng = rand::rng();
@@ -468,7 +467,6 @@ impl App {
         use sha2::{Digest, Sha256};
 
         let verifier: String = {
-            use rand::Rng;
             const CHARSET: &[u8] =
                 b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
             let mut rng = rand::rng();

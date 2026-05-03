@@ -16,9 +16,10 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
-use reqwest::{Client, StatusCode};
+use reqwest::Client;
 use serde_json::Value;
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -26,6 +27,9 @@ const DEFAULT_API_BASE: &str = "https://opencode.ai/zen/go/v1";
 const DEFAULT_MODEL: &str = "deepseek-v4-flash";
 
 const KNOWN_MODELS: &[&str] = &["deepseek-v4-flash", "THUDM/GLM-4.5"];
+
+const REQUEST_TIMEOUT_SECS: u64 = 300;
+const SSE_BUFFER_MAX_SIZE: usize = 1024 * 1024; // 1MB
 
 pub(crate) fn is_known_model(model: &str) -> bool {
     let normalized = model.trim();
@@ -57,8 +61,13 @@ impl OpenCodeGoProvider {
             .map(|s| s.to_string())
             .unwrap_or_else(|| DEFAULT_MODEL.to_string());
 
+        let client = Client::builder()
+            .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+            .build()
+            .context("Failed to create OpenCode Go HTTP client")?;
+
         Ok(Self {
-            client: crate::provider::shared_http_client(),
+            client,
             model: Arc::new(RwLock::new(model)),
             api_base: profile.api_base,
             api_key,
@@ -67,8 +76,16 @@ impl OpenCodeGoProvider {
 
     /// Create a new OpenCode Go provider with explicit configuration
     pub fn new(api_base: String, api_key: String, model: String) -> Self {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+            .build()
+            .unwrap_or_else(|e| {
+                crate::logging::warn(&format!("Failed to create HTTP client: {}, using default", e));
+                crate::provider::shared_http_client()
+            });
+
         Self {
-            client: crate::provider::shared_http_client(),
+            client,
             model: Arc::new(RwLock::new(model)),
             api_base: crate::provider_catalog::normalize_api_base(&api_base).unwrap_or_else(|| {
                 crate::logging::warn(&format!("Failed to normalize API base '{}', using default: {}", api_base, DEFAULT_API_BASE));
@@ -122,7 +139,7 @@ impl OpenCodeGoProvider {
             anyhow::bail!(
                 "OpenCode Go API error ({}): {} (api_base={}, model={})",
                 status,
-                body,
+                body.trim(),
                 self.api_base,
                 self.model()
             );
@@ -376,7 +393,6 @@ async fn convert_openai_stream_to_anthropic(
     tokio::spawn(async move {
         let mut stream = stream;
         let mut buffer = String::new();
-        const MAX_BUFFER_SIZE: usize = 1024 * 1024; // 1MB limit to prevent memory issues
         let mut message_end_sent = false;
         // Track partial tool calls for streaming argument accumulation
         let mut partial_tool_calls: std::collections::HashMap<String, (String, String)> = std::collections::HashMap::new();
@@ -396,9 +412,7 @@ async fn convert_openai_stream_to_anthropic(
                             let data = &line[6..];
                             if data == "[DONE]" {
                                 if !message_end_sent {
-                                    if tx.send(Ok(StreamEvent::MessageEnd { stop_reason: None })).await.is_err() {
-                                        return;
-                                    }
+                                    let _ = tx.send(Ok(StreamEvent::MessageEnd { stop_reason: None })).await;
                                     message_end_sent = true;
                                 }
                                 return;
@@ -481,10 +495,8 @@ async fn convert_openai_stream_to_anthropic(
                         buffer = normalized[last_newline + 1..].to_string();
                     } else {
                         // No newline found - check buffer size to prevent unbounded growth
-                        if normalized.len() > MAX_BUFFER_SIZE {
-                            if tx.send(Err(anyhow::anyhow!("Stream buffer exceeded {} bytes, clearing to prevent memory issues", MAX_BUFFER_SIZE))).await.is_err() {
-                                return;
-                            }
+                        if normalized.len() > SSE_BUFFER_MAX_SIZE {
+                            let _ = tx.send(Err(anyhow::anyhow!("SSE buffer exceeded {} bytes, clearing to prevent memory issues", SSE_BUFFER_MAX_SIZE))).await;
                             buffer.clear();
                         } else {
                             buffer = normalized;
@@ -492,9 +504,7 @@ async fn convert_openai_stream_to_anthropic(
                     }
                 }
                 Err(e) => {
-                    if tx.send(Err(anyhow::anyhow!("Stream error: {}", e))).await.is_err() {
-                        return;
-                    }
+                    let _ = tx.send(Err(anyhow::anyhow!("OpenCode Go stream error: {}", e))).await;
                     return;
                 }
             }
@@ -502,9 +512,7 @@ async fn convert_openai_stream_to_anthropic(
 
         // Send final MessageEnd if not already sent
         if !message_end_sent {
-            if tx.send(Ok(StreamEvent::MessageEnd { stop_reason: None })).await.is_err() {
-                return;
-            }
+            let _ = tx.send(Ok(StreamEvent::MessageEnd { stop_reason: None })).await;
         }
     });
 
@@ -593,6 +601,8 @@ mod tests {
             Message {
                 role: Role::User,
                 content: vec![ContentBlock::Text { text: "Hello".to_string(), cache_control: None }],
+                timestamp: None,
+                tool_duration_ms: None,
             },
         ];
 
@@ -608,6 +618,8 @@ mod tests {
             Message {
                 role: Role::User,
                 content: vec![ContentBlock::Text { text: "Hello".to_string(), cache_control: None }],
+                timestamp: None,
+                tool_duration_ms: None,
             },
         ];
 
@@ -629,6 +641,8 @@ mod tests {
                         input: serde_json::json!({"param": "value"}),
                     },
                 ],
+                timestamp: None,
+                tool_duration_ms: None,
             },
         ];
 
@@ -648,6 +662,8 @@ mod tests {
                     name: "test_tool".to_string(),
                     input: serde_json::json!({"param": "value"}),
                 }],
+                timestamp: None,
+                tool_duration_ms: None,
             },
             Message {
                 role: Role::User,
@@ -656,6 +672,8 @@ mod tests {
                     content: "Result".to_string(),
                     is_error: Some(false),
                 }],
+                timestamp: None,
+                tool_duration_ms: None,
             },
         ];
 

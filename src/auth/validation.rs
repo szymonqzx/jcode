@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 const VALIDATION_STATUS_FILE: &str = "auth-validation.json";

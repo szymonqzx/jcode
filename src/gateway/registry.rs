@@ -41,7 +41,6 @@ impl DeviceRegistry {
 
     /// Generate a 6-digit pairing code, valid for 5 minutes
     pub fn generate_pairing_code(&mut self) -> String {
-        use rand::Rng;
         use rand::RngExt;
         let code: String = format!("{:06}", rand::rng().random_range(0..1_000_000u32));
         let now = chrono::Utc::now();
@@ -84,7 +83,6 @@ impl DeviceRegistry {
         device_name: String,
         apns_token: Option<String>,
     ) -> String {
-        use rand::Rng;
         use rand::RngExt;
         // Generate a random auth token
         let token_bytes: [u8; 32] = rand::rng().random();

@@ -7,7 +7,6 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::ffi::CString;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

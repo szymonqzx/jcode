@@ -299,6 +299,3 @@ mod windows {
 #[cfg(test)]
 #[path = "stdin_detect_tests.rs"]
 mod stdin_detect_tests;
-
-// Re-export from jcode_core for use in the main crate
-pub use jcode_core::stdin_detect::*;

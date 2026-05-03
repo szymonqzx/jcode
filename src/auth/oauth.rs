@@ -95,7 +95,6 @@ fn ensure_claude_inference_scope(scopes: &[String], action: &str) -> Result<()> 
 
 /// Generate PKCE code verifier and challenge
 fn generate_pkce() -> (String, String) {
-    use rand::Rng;
     use rand::RngExt;
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     let mut rng = rand::rng();

@@ -90,6 +90,8 @@ fn test_multi_provider_with_cursor() -> MultiProvider {
         gemini: RwLock::new(None),
         cursor: RwLock::new(Some(Arc::new(cursor::CursorCliProvider::new()))),
         openrouter: RwLock::new(None),
+        windsurf: RwLock::new(None),
+        opencode_go: RwLock::new(None),
         active: RwLock::new(ActiveProvider::Cursor),
         use_claude_cli: false,
         startup_notices: RwLock::new(Vec::new()),
