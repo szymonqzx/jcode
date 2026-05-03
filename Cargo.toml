@@ -7,23 +7,18 @@ edition = "2024"
 [workspace]
 members = [
     ".",
+    # Consolidated base types (replaces: message, auth, config, gateway, background, side-panel, usage)
+    "crates/jcode-base-types",
     "crates/jcode-agent-runtime",
-    "crates/jcode-ambient-types",
-    "crates/jcode-auth-types",
     "crates/jcode-embedding",
-    "crates/jcode-gateway-types",
-    "crates/jcode-pdf",
-    "crates/jcode-background-types",
-    "crates/jcode-batch-types",
-    "crates/jcode-config-types",
+    # Consolidated workflow types (replaces: task, ambient, batch)
+    "crates/jcode-workflow-types",
     "crates/jcode-core",
-    "crates/jcode-memory-types",
-    "crates/jcode-message-types",
+    # Expanded session types (includes: session, memory)
+    "crates/jcode-session-types",
     "crates/jcode-plan",
     "crates/jcode-protocol",
     "crates/jcode-selfdev-types",
-    "crates/jcode-session-types",
-    "crates/jcode-side-panel-types",
     "crates/jcode-azure-auth",
     "crates/jcode-notify-email",
     "crates/jcode-provider-metadata",
@@ -31,16 +26,27 @@ members = [
     "crates/jcode-provider-openrouter",
     "crates/jcode-provider-gemini",
     "crates/jcode-tui-markdown",
-    "crates/jcode-usage-types",
     "crates/jcode-tui-core",
     "crates/jcode-tui-mermaid",
-    "crates/jcode-task-types",
     "crates/jcode-tui-render",
     "crates/jcode-terminal-launch",
     "crates/jcode-tui-workspace",
     "crates/jcode-mobile-core",
     "crates/jcode-mobile-sim",
     "crates/jcode-desktop",
+    # Legacy types crates - kept for backward compatibility during migration
+    # TODO(TEAM_001): Remove after full migration
+    "crates/jcode-ambient-types",
+    "crates/jcode-auth-types",
+    "crates/jcode-background-types",
+    "crates/jcode-batch-types",
+    "crates/jcode-config-types",
+    "crates/jcode-gateway-types",
+    "crates/jcode-memory-types",
+    "crates/jcode-message-types",
+    "crates/jcode-side-panel-types",
+    "crates/jcode-task-types",
+    "crates/jcode-usage-types",
 ]
 
 [lib]
