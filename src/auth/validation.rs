@@ -19,7 +19,7 @@ pub fn load_all() -> HashMap<String, ProviderValidationRecord> {
                 Err(err) => {
                     crate::logging::warn(&format!(
                         "Failed to parse validation status file at {}: {}. Using empty map.",
-                        path.display(),
+                        path,
                         err
                     ));
                     HashMap::new()
@@ -29,7 +29,7 @@ pub fn load_all() -> HashMap<String, ProviderValidationRecord> {
         Err(err) => {
             crate::logging::warn(&format!(
                 "Failed to read validation status file at {}: {}. Using empty map.",
-                path.display(),
+                path,
                 err
             ));
             HashMap::new()

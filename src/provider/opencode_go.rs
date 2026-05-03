@@ -70,13 +70,10 @@ impl OpenCodeGoProvider {
         Self {
             client: crate::provider::shared_http_client(),
             model: Arc::new(RwLock::new(model)),
-            api_base: match crate::provider_catalog::normalize_api_base(&api_base) {
-                Ok(base) => base,
-                Err(e) => {
-                    crate::logging::warn(&format!("Failed to normalize API base '{}', using default: {}", api_base, e));
-                    DEFAULT_API_BASE.to_string()
-                }
-            },
+            api_base: crate::provider_catalog::normalize_api_base(&api_base).unwrap_or_else(|_| {
+                crate::logging::warn(&format!("Failed to normalize API base '{}', using default: {}", api_base, DEFAULT_API_BASE));
+                DEFAULT_API_BASE.to_string()
+            }),
             api_key,
         }
     }
@@ -164,7 +161,7 @@ impl Provider for OpenCodeGoProvider {
     }
 
     fn model(&self) -> String {
-        recover_rwlock_read(&self.model, |guard| guard, "opencode-go", "model read")
+        recover_rwlock_read(&self.model, |guard| guard.to_string(), "opencode-go", "model read")
     }
 
     fn set_model(&self, model: &str) -> anyhow::Result<()> {
