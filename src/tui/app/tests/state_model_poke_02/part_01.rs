@@ -164,9 +164,7 @@ fn test_handterm_native_scroll_client_roundtrips_over_socket() {
     let dir = tempfile::tempdir().expect("tempdir");
     let socket_path = dir.path().join("handterm-scroll.sock");
     let listener = UnixListener::bind(&socket_path).expect("bind unix listener");
-    unsafe {
-        std::env::set_var("HANDTERM_NATIVE_SCROLL_SOCKET", &socket_path);
-    }
+    crate::env::set_var("HANDTERM_NATIVE_SCROLL_SOCKET", &socket_path);
 
     let mut client = super::handterm_native_scroll::HandtermNativeScrollClient::connect_from_env()
         .expect("native scroll client should connect from env");
@@ -205,9 +203,7 @@ fn test_handterm_native_scroll_client_roundtrips_over_socket() {
     app.apply_handterm_native_scroll(command);
     assert_eq!(app.scroll_offset, 4);
 
-    unsafe {
-        std::env::remove_var("HANDTERM_NATIVE_SCROLL_SOCKET");
-    }
+    crate::env::remove_var("HANDTERM_NATIVE_SCROLL_SOCKET");
 }
 
 #[test]

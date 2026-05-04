@@ -307,6 +307,9 @@ fn test_selfdev_build_command_prefers_repo_wrapper_when_present() {
         assert_eq!(build.args.first().map(String::as_str), Some("-File"));
         let command = build.args.get(1).expect("script path");
         assert!(command.contains("dev_cargo.ps1"));
+        assert!(!command.contains("jcode-desktop"));
+        assert!(build.display.contains("-p jcode --bin jcode"));
+        assert!(!build.display.contains("jcode-desktop"));
     }
     #[cfg(not(windows))]
     {
@@ -314,10 +317,10 @@ fn test_selfdev_build_command_prefers_repo_wrapper_when_present() {
         assert_eq!(build.args.first().map(String::as_str), Some("-lc"));
         let command = build.args.get(1).expect("shell command");
         assert!(command.contains("dev_cargo.sh' build --profile selfdev -p jcode --bin jcode"));
+        assert!(!command.contains("jcode-desktop"));
+        assert!(build.display.contains("-p jcode --bin jcode"));
+        assert!(!build.display.contains("jcode-desktop"));
     }
-    assert!(!command.contains("jcode-desktop"));
-    assert!(build.display.contains("-p jcode --bin jcode"));
-    assert!(!build.display.contains("jcode-desktop"));
 }
 
 #[test]
@@ -334,10 +337,10 @@ fn test_selfdev_build_command_falls_back_to_cargo_when_wrapper_missing() {
         assert_eq!(build.args.first().map(String::as_str), Some("-lc"));
         let command = build.args.get(1).expect("shell command");
         assert!(command.contains("cargo build --profile selfdev -p jcode --bin jcode"));
+        assert!(!command.contains("jcode-desktop"));
+        assert!(build.display.contains("-p jcode --bin jcode"));
+        assert!(!build.display.contains("jcode-desktop"));
     }
-    assert!(!command.contains("jcode-desktop"));
-    assert!(build.display.contains("-p jcode --bin jcode"));
-    assert!(!build.display.contains("jcode-desktop"));
 }
 
 #[test]

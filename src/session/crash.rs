@@ -1,5 +1,6 @@
 use super::{Session, SessionStatus, active_pids_dir, session_exists};
 use crate::id::extract_session_name;
+use crate::logging;
 use crate::message::{ContentBlock, Role};
 use crate::storage;
 use anyhow::Result;
@@ -24,7 +25,12 @@ pub fn recover_crashed_sessions() -> Result<Vec<String>> {
             && let Ok(mut session) = Session::load(stem)
         {
             if session.detect_crash() {
-                let _ = session.save();
+                if let Err(err) = session.save() {
+                    logging::warn(&format!(
+                        "Failed to persist crash status for session {}: {}",
+                        session.id, err
+                    ));
+                }
             }
             sessions.push(session);
         }
@@ -143,7 +149,12 @@ pub fn detect_crashed_sessions() -> Result<Option<CrashedSessionsInfo>> {
             && let Ok(mut session) = Session::load(stem)
         {
             if session.detect_crash() {
-                let _ = session.save();
+                if let Err(err) = session.save() {
+                    logging::warn(&format!(
+                        "Failed to persist crash status for session {}: {}",
+                        session.id, err
+                    ));
+                }
             }
             sessions.push(session);
         }
@@ -290,7 +301,12 @@ fn find_crashed_via_pid_files() -> Option<Vec<(String, String)>> {
                     "Process {} exited unexpectedly (no shutdown signal captured)",
                     pid
                 )));
-                let _ = session.save();
+                if let Err(err) = session.save() {
+                    logging::warn(&format!(
+                        "Failed to persist crash status for session {}: {}",
+                        session_id, err
+                    ));
+                }
                 let ts = session.last_active_at.unwrap_or(session.updated_at);
                 if ts <= cutoff {
                     continue;

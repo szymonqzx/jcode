@@ -5,23 +5,25 @@ use std::sync::RwLock;
 /// Helper function to recover from poisoned RwLock with logging
 pub fn recover_rwlock_read<T, F>(lock: &RwLock<T>, fallback: F, provider_name: &str, context: &str) -> T
 where
+    T: Clone,
     F: FnOnce(&T) -> T,
 {
-    lock.read().unwrap_or_else(|e| {
+    let guard = lock.read().unwrap_or_else(|e| {
         crate::logging::warn(&format!("Recovering from poisoned RwLock in {} provider ({})", provider_name, context));
-        let guard = e.into_inner();
-        fallback(&guard)
-    }).clone()
+        e.into_inner()
+    });
+    fallback(&guard)
 }
 
 /// Helper function to recover from poisoned RwLock with logging (write)
-pub fn recover_rwlock_write<T, F>(lock: &RwLock<T>, fallback: F, provider_name: &str, context: &str) -> T
+/// The closure receives a mutable reference and should perform the assignment directly
+pub fn recover_rwlock_write<T, F>(lock: &RwLock<T>, fallback: F, provider_name: &str, context: &str)
 where
-    F: FnOnce(&T) -> T,
+    F: FnOnce(&mut T),
 {
-    lock.write().unwrap_or_else(|e| {
+    let mut guard = lock.write().unwrap_or_else(|e| {
         crate::logging::warn(&format!("Recovering from poisoned RwLock in {} provider ({})", provider_name, context));
-        let guard = e.into_inner();
-        fallback(&guard)
-    })
+        e.into_inner()
+    });
+    fallback(&mut guard);
 }

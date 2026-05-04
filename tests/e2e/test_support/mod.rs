@@ -317,7 +317,7 @@ impl WsTestClient {
     async fn send_request(&mut self, request: Request) -> Result<u64> {
         let id = request.id();
         let json = serde_json::to_string(&request)?;
-        self.stream.send(WsMessage::Text(json)).await?;
+        self.stream.send(WsMessage::Text(json.into())).await?;
         Ok(id)
     }
 

@@ -37,7 +37,7 @@ jobs:
           ssh-private-key: ${{ secrets.DEPLOY_KEY }}
         continue-on-error: true
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
         with:
           targets: ${{ matrix.target }}
 

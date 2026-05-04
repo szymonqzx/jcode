@@ -1,13 +1,22 @@
 [build]
-# Use sccache for compilation caching
-# Set RUSTC_WRAPPER=sccache in your shell env; no hardcoded path needed.
+# =============================================================================
+# FAST BUILD CONFIGURATION
+# =============================================================================
+# For optimal build times, enable sccache:
+#   1. Install: cargo install sccache
+#   2. Set env: $env:RUSTC_WRAPPER="sccache" (PowerShell) or export RUSTC_WRAPPER=sccache (Unix)
+#   3. Verify: sccache --show-stats
+#
 # CI overrides this file, so leaving rustc-wrapper unset here is safe.
 # Local fast-linker selection is handled by scripts/dev_cargo.sh so we don't
 # hard-force a linker mode that may be broken on a contributor machine.
+# =============================================================================
 jobs = 8
+# Parallel frontend (nightly only) - speeds up macro-heavy crates
 rustflags = ["-Z", "threads=8", "-Z", "share-generics"]
 incremental = true
-rustc-wrapper = "sccache"
+# Uncomment after installing sccache for persistent cross-build caching:
+# rustc-wrapper = "sccache"
 
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "linker=lld-link"]
@@ -20,8 +29,10 @@ rustflags = ["-C", "linker=lld-link"]
 
 # Nightly-only optimizations (experimental)
 # Cranelift backend (faster compilation, lower quality code - dev builds only)
-[unstable]
-codegen-backend = true
-
-[profile.dev]
-codegen-backend = "cranelift"
+# NOTE: Requires nightly Rust. Commented out for stable compatibility.
+# To enable: use nightly Rust and uncomment these lines
+# [unstable]
+# codegen-backend = true
+#
+# [profile.dev]
+# codegen-backend = "cranelift"

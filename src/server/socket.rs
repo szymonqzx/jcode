@@ -191,7 +191,9 @@ pub async fn spawn_server_notify(cmd: &mut std::process::Command) -> Result<std:
             if flags >= 0 {
                 libc::fcntl(write_fd, libc::F_SETFD, flags & !libc::FD_CLOEXEC);
             }
-            libc::setsid();
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
             Ok(())
         });
     }

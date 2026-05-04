@@ -7,23 +7,18 @@ edition = "2024"
 [workspace]
 members = [
     ".",
+    # Consolidated base types (replaces: message, auth, config, gateway, background, side-panel, usage)
+    "crates/jcode-base-types",
     "crates/jcode-agent-runtime",
-    "crates/jcode-ambient-types",
-    "crates/jcode-auth-types",
     "crates/jcode-embedding",
-    "crates/jcode-gateway-types",
-    "crates/jcode-pdf",
-    "crates/jcode-background-types",
-    "crates/jcode-batch-types",
-    "crates/jcode-config-types",
+    # Consolidated workflow types (replaces: task, ambient, batch)
+    "crates/jcode-workflow-types",
     "crates/jcode-core",
-    "crates/jcode-memory-types",
-    "crates/jcode-message-types",
+    # Expanded session types (includes: session, memory)
+    "crates/jcode-session-types",
     "crates/jcode-plan",
     "crates/jcode-protocol",
     "crates/jcode-selfdev-types",
-    "crates/jcode-session-types",
-    "crates/jcode-side-panel-types",
     "crates/jcode-azure-auth",
     "crates/jcode-notify-email",
     "crates/jcode-provider-metadata",
@@ -31,17 +26,28 @@ members = [
     "crates/jcode-provider-openrouter",
     "crates/jcode-provider-gemini",
     "crates/jcode-tui-markdown",
-    "crates/jcode-usage-types",
     "crates/jcode-tui-core",
     "crates/jcode-tui-mermaid",
     "crates/jcode-task-types",
     "crates/jcode-tui-render",
-    "crates/jcode-task-types",
     "crates/jcode-terminal-launch",
     "crates/jcode-tui-workspace",
     "crates/jcode-mobile-core",
     "crates/jcode-mobile-sim",
     "crates/jcode-desktop",
+    # Legacy types crates - kept for backward compatibility during migration
+    # TODO(TEAM_001): Remove after full migration
+    "crates/jcode-ambient-types",
+    "crates/jcode-auth-types",
+    "crates/jcode-background-types",
+    "crates/jcode-batch-types",
+    "crates/jcode-config-types",
+    "crates/jcode-gateway-types",
+    "crates/jcode-memory-types",
+    "crates/jcode-message-types",
+    "crates/jcode-side-panel-types",
+    "crates/jcode-task-types",
+    "crates/jcode-usage-types",
 ]
 
 [lib]
@@ -67,12 +73,12 @@ tikv-jemalloc-ctl = { version = "0.6", optional = true }
 tikv-jemalloc-sys = { version = "0.6", optional = true }
 
 # Async runtime
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net", "time", "process", "sync", "fs"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net", "time", "process", "sync", "fs", "signal"] }
 futures = "0.3"
 async-trait = "0.1"
 
 # HTTP client
-reqwest = { version = "0.13", features = ["json", "stream"] }
+reqwest = { version = "0.13", features = ["json", "stream", "form"] }
 tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "rustls-tls-native-roots"] }
 
 # Serialization
@@ -97,6 +103,7 @@ libc = "0.2"             # Unix system calls (flock)
 chrono = { version = "0.4", features = ["serde"] }
 regex = "1"
 uuid = { version = "1", features = ["v4", "v5"] }
+prost = "0.13"          # Protocol buffers for windsurf provider
 
 # Embeddings (local inference) - behind feature flag (163 crates, slow to compile)
 jcode-embedding = { path = "crates/jcode-embedding", optional = true }
@@ -170,7 +177,26 @@ agentgrep = { git = "https://github.com/1jehuang/agentgrep.git", tag = "v0.1.2" 
 qr2term = "0.3.3"
 
 [features]
-default = ["embeddings", "pdf", "tui"]
+# =============================================================================
+# Feature Profiles for Build Speed
+# =============================================================================
+# Use these for faster iteration during development:
+#   - light:    Core only, fastest builds (cargo build --features light)
+#   - standard: Core + essential TUI, good for UI work (cargo build --features standard)
+#   - full:     Everything including embeddings/PDF (default)
+#
+default = ["full"]
+
+# Core functionality only - fastest builds for testing business logic
+light = []
+
+# Core + essential TUI - good balance for UI development
+standard = ["tui"]
+
+# Full functionality including heavy dependencies
+full = ["embeddings", "pdf", "tui"]
+
+# Individual feature flags
 jemalloc = [
     "dep:tikv-jemallocator",
     "dep:tikv-jemalloc-ctl",
@@ -232,10 +258,23 @@ opt-level = 1
 incremental = true
 codegen-units = 256
 split-debuginfo = "off"
+panic = "abort"
 
 [profile.dev.package."*"]
 opt-level = 1
 codegen-units = 256
+
+[profile.dev.build-override]
+opt-level = 3
+codegen-units = 16
+
+# Fast dev profile for even quicker iteration during development
+# Use with: cargo build --profile fast-dev
+[profile.fast-dev]
+inherits = "dev"
+opt-level = 0
+codegen-units = 512
+panic = "abort"
 
 [profile.test]
 debug = 0

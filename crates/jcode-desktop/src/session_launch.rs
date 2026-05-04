@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufReader};
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;

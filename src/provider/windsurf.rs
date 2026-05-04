@@ -10,26 +10,30 @@ use super::{EventStream, Provider};
 use super::common::{recover_rwlock_read, recover_rwlock_write};
 use super::protobuf::{encode_message, encode_string, encode_varint_field, parse_fields, FieldValue};
 use crate::auth::windsurf as windsurf_auth;
-use crate::logging;
-use crate::message::{ContentBlock, Message as ChatMessage, Role, StreamEvent, ToolDefinition};
+use crate::message::{Message as ChatMessage, StreamEvent, ToolDefinition};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use bytes::Bytes;
-use futures::{Stream, StreamExt};
-use prost::Message as ProstMessage;
+use futures::StreamExt;
 use reqwest::Client;
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
 
 /// Available Windsurf models
 pub(crate) const AVAILABLE_MODELS: &[&str] = &[
     "swe-1.5",
+    "swe-1.5-thinking",
+    "swe-1.5-slow",
     "swe-1.6",
+    "kimi-k2",
+    "kimi-k2-thinking",
     "kimi-k2.5",
     "kimi-k2.6",
 ];
+
+/// Request timeout duration
+const REQUEST_TIMEOUT_SECS: u64 = 300;
 
 /// Model enum values for Windsurf gRPC
 const MODEL_ENUMS: &[(&str, i32)] = &[
@@ -153,7 +157,7 @@ fn build_chat_request(
     api_key: &str,
     _version: &str,
     model_enum: i32,
-    messages: &[Message],
+    messages: &[ChatMessage],
     model_name: &str,
     system_prompt: Option<&str>,
 ) -> Result<Vec<u8>> {
@@ -236,15 +240,17 @@ fn build_chat_request(
 /// Resolve model name to enum value
 /// Returns an error if the model is not known, to avoid silently using the wrong model
 fn resolve_model_enum(model: &str) -> Result<i32> {
+    let normalized = model.trim();
     MODEL_ENUMS
         .iter()
-        .find(|(name, _)| *name == model)
+        .find(|(name, _)| *name == normalized)
         .map(|(_, enum_val)| *enum_val)
         .ok_or_else(|| {
+            let known = MODEL_ENUMS.iter().map(|(name, _)| *name).collect::<Vec<_>>().join(", ");
             anyhow::anyhow!(
                 "Unknown Windsurf model '{}'. Known models: {}",
-                model,
-                MODEL_ENUMS.iter().map(|(name, _)| *name).collect::<Vec<_>>().join(", ")
+                normalized,
+                known
             )
         })
 }
@@ -252,33 +258,36 @@ fn resolve_model_enum(model: &str) -> Result<i32> {
 /// Build a tool-calling prompt when tools are provided
 /// This enhances the system prompt with tool definitions and instructions
 fn build_tool_calling_prompt(system: &str, tools: &[ToolDefinition]) -> String {
-    let mut prompt = system.to_string();
-
-    if !prompt.is_empty() {
-        prompt.push_str("\n\n");
+    if tools.is_empty() {
+        return system.to_string();
     }
 
-    prompt.push_str("You have access to the following tools:\n\n");
+    let mut prompt = if system.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n\n", system.trim())
+    };
+
+    prompt.push_str("You have access to the following tools. Use them when appropriate:\n\n");
 
     for tool in tools {
-        prompt.push_str(&format!("Tool: {}\n", tool.name));
-        prompt.push_str(&format!("Description: {}\n", tool.description));
-        let schema_json = match serde_json::to_string(&tool.input_schema) {
+        prompt.push_str(&format!("## {}\n", tool.name));
+        prompt.push_str(&format!("{}\n\n", tool.description.trim()));
+        let schema_json = match serde_json::to_string_pretty(&tool.input_schema) {
             Ok(s) => s,
             Err(e) => {
                 crate::logging::warn(&format!("Failed to serialize tool input schema for '{}': {}", tool.name, e));
                 "{}".to_string()
             }
         };
-        prompt.push_str(&format!("Input Schema: {}\n", schema_json));
-        prompt.push_str("\n");
+        prompt.push_str(&format!("Parameters (JSON Schema):\n{}\n\n", schema_json));
     }
 
-    prompt.push_str("When you need to use a tool, respond with a tool call in the following format:\n");
+    prompt.push_str("When you need to use a tool, respond with a JSON object in this format:\n");
+    prompt.push_str("```json\n");
+    prompt.push_str("{\n  \"tool_calls\": [\n    {\n      \"name\": \"tool_name\",\n      \"arguments\": {\"param\": \"value\"}\n    }\n  ]\n}\n");
     prompt.push_str("```\n");
-    prompt.push_str("tool_calls: [{\"name\": \"tool_name\", \"arguments\": {\"param\": \"value\"}}]\n");
-    prompt.push_str("```\n");
-    prompt.push_str("Otherwise, provide your response directly as text.\n");
+    prompt.push_str("If no tools are needed, respond directly with your answer as text.\n");
 
     prompt
 }
@@ -372,6 +381,7 @@ fn extract_text_from_chunk(chunk: &[u8]) -> String {
 pub struct WindsurfProvider {
     model: Arc<RwLock<String>>,
     credentials: Arc<RwLock<windsurf_auth::WindsurfCredentials>>,
+    client: Client,
 }
 
 impl WindsurfProvider {
@@ -380,27 +390,34 @@ impl WindsurfProvider {
         let credentials = windsurf_auth::load_credentials()
             .context("Failed to load Windsurf credentials")?;
 
+        let client = Client::builder()
+            .http2_prior_knowledge()
+            .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+            .build()
+            .context("Failed to create Windsurf HTTP client")?;
+
         Ok(Self {
             model: Arc::new(RwLock::new(model)),
             credentials: Arc::new(RwLock::new(credentials)),
+            client,
         })
     }
 
     /// Get the current model
     pub fn model(&self) -> String {
-        recover_rwlock_read(&self.model, |guard| guard, "windsurf", "model read")
+        recover_rwlock_read(&self.model, |guard| guard.to_string(), "windsurf", "model read")
     }
 
     /// Set the model
     pub fn set_model(&self, model: String) {
-        *recover_rwlock_write(&self.model, |guard| guard, "windsurf", "model write") = model;
+        recover_rwlock_write(&self.model, |guard| *guard = model, "windsurf", "model write");
     }
 
     /// Refresh credentials from disk
     pub fn refresh_credentials(&self) -> Result<()> {
         let new_creds = windsurf_auth::load_credentials()
             .context("Failed to refresh Windsurf credentials")?;
-        *recover_rwlock_write(&self.credentials, |guard| guard, "windsurf", "credentials write") = new_creds;
+        recover_rwlock_write(&self.credentials, |guard| *guard = new_creds, "windsurf", "credentials write");
         Ok(())
     }
 }
@@ -409,7 +426,7 @@ impl WindsurfProvider {
 impl Provider for WindsurfProvider {
     async fn complete(
         &self,
-        messages: &[Message],
+        messages: &[ChatMessage],
         tools: &[ToolDefinition],
         system: &str,
         _resume_session_id: Option<&str>,
@@ -417,19 +434,32 @@ impl Provider for WindsurfProvider {
         let (tx, rx) = mpsc::channel(100);
 
         // Clone credentials and messages for the async task
-        let credentials = recover_rwlock_read(&self.credentials, |guard| guard, "windsurf", "credentials read");
+        let credentials = recover_rwlock_read(&self.credentials, |guard| guard.clone(), "windsurf", "credentials read");
         let model = self.model();
         let messages = messages.to_vec();
         let system = system.to_string();
         let tools = tools.to_vec();
+        let client = self.client.clone();
 
         tokio::spawn(async move {
             // Build gRPC request with protobuf encoding
-            let model_enum = resolve_model_enum(&model)
-                .map_err(|e| anyhow::anyhow!("Failed to resolve Windsurf model: {}", e))?;
+            let model_enum = match resolve_model_enum(&model) {
+                Ok(m) => m,
+                Err(e) => {
+                    let error_msg = anyhow::anyhow!("Failed to resolve Windsurf model: {}", e);
+                    let _ = tx.send(Err(error_msg)).await;
+                    return;
+                }
+            };
             let model_name = &model;
-            let api_key = credentials.api_key.as_deref()
-                .ok_or_else(|| anyhow::anyhow!("Windsurf API key not found. Please login to Windsurf first."))?;
+            let api_key = match credentials.api_key.as_deref() {
+                Some(k) => k,
+                None => {
+                    let error_msg = anyhow::anyhow!("Windsurf API key not found. Please login to Windsurf first.");
+                    let _ = tx.send(Err(error_msg)).await;
+                    return;
+                }
+            };
             let version = &credentials.version;
 
             // Build tool-calling prompt if tools are provided
@@ -457,20 +487,7 @@ impl Provider for WindsurfProvider {
                 }
             };
 
-            // Create HTTP/2 client
-            let client = match reqwest::Client::builder()
-                .http2_prior_knowledge()
-                .build()
-            {
-                Ok(c) => c,
-                Err(e) => {
-                    let error_msg = anyhow::anyhow!("Failed to create HTTP/2 client: {} (model={})", e, model);
-                    if tx.send(Err(error_msg)).await.is_err() {
-                        return;
-                    }
-                    return;
-                }
-            };
+            // Reuse existing HTTP/2 client
 
             let url = format!("http://localhost:{}/exa.language_server_pb.LanguageServerService/RawGetChatMessage", credentials.port);
 
@@ -491,10 +508,13 @@ impl Provider for WindsurfProvider {
             {
                 Ok(r) => r,
                 Err(e) => {
-                    let error_msg = anyhow::anyhow!("Failed to connect to Windsurf: {} (port={}, model={})", e, credentials.port, model);
-                    if tx.send(Err(error_msg)).await.is_err() {
-                        return;
-                    }
+                    let error_msg = anyhow::anyhow!(
+                        "Failed to connect to Windsurf: {} (port={}, model={})",
+                        e,
+                        credentials.port,
+                        model
+                    );
+                    let _ = tx.send(Err(error_msg)).await;
                     return;
                 }
             };
@@ -508,10 +528,14 @@ impl Provider for WindsurfProvider {
                         "unknown".to_string()
                     }
                 };
-                let error_msg = anyhow::anyhow!("Windsurf returned error {}: {} (port={}, model={})", status, body, credentials.port, model);
-                if tx.send(Err(error_msg)).await.is_err() {
-                    return;
-                }
+                let error_msg = anyhow::anyhow!(
+                    "Windsurf returned error {}: {} (port={}, model={})",
+                    status,
+                    body.trim(),
+                    credentials.port,
+                    model
+                );
+                let _ = tx.send(Err(error_msg)).await;
                 return;
             }
 
@@ -521,6 +545,7 @@ impl Provider for WindsurfProvider {
             while let Some(chunk_result) = stream.next().await {
                 match chunk_result {
                     Ok(chunk) => {
+                        let chunk: bytes::Bytes = chunk;
                         // Parse gRPC response chunk using protobuf decoding
                         let text = extract_text_from_chunk(&chunk);
                         if !text.is_empty() {
@@ -530,10 +555,8 @@ impl Provider for WindsurfProvider {
                         }
                     }
                     Err(e) => {
-                        let error_msg = anyhow::anyhow!("Stream error: {}", e);
-                        if tx.send(Err(error_msg)).await.is_err() {
-                            return;
-                        }
+                        let error_msg = anyhow::anyhow!("Windsurf stream error: {} (model={})", e, model);
+                        let _ = tx.send(Err(error_msg)).await;
                         break;
                     }
                 }
@@ -555,6 +578,7 @@ impl Provider for WindsurfProvider {
         Arc::new(Self {
             model: Arc::clone(&self.model),
             credentials: Arc::clone(&self.credentials),
+            client: self.client.clone(),
         })
     }
 
@@ -575,7 +599,7 @@ impl Provider for WindsurfProvider {
     }
 
     fn set_model(&self, model: &str) -> anyhow::Result<()> {
-        *recover_rwlock_write(&self.model, |guard| guard, "windsurf", "model write") = model.to_string();
+        recover_rwlock_write(&self.model, |guard| *guard = model.to_string(), "windsurf", "model write");
         Ok(())
     }
 
@@ -628,7 +652,11 @@ mod tests {
     fn test_available_models() {
         assert!(!AVAILABLE_MODELS.is_empty());
         assert!(AVAILABLE_MODELS.contains(&"swe-1.5"));
+        assert!(AVAILABLE_MODELS.contains(&"swe-1.5-thinking"));
+        assert!(AVAILABLE_MODELS.contains(&"swe-1.5-slow"));
         assert!(AVAILABLE_MODELS.contains(&"swe-1.6"));
+        assert!(AVAILABLE_MODELS.contains(&"kimi-k2"));
+        assert!(AVAILABLE_MODELS.contains(&"kimi-k2-thinking"));
         assert!(AVAILABLE_MODELS.contains(&"kimi-k2.5"));
         assert!(AVAILABLE_MODELS.contains(&"kimi-k2.6"));
     }

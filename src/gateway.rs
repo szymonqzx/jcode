@@ -270,7 +270,7 @@ async fn handle_ws_connection(
         loop {
             interval.tick().await;
             let mut sink = sink_for_keepalive.lock().await;
-            if sink.send(Message::Ping(Vec::new())).await.is_err() {
+            if sink.send(Message::Ping(Vec::new().into())).await.is_err() {
                 logging::info(&format!(
                     "Gateway: stopping keepalive for {} after ping send failure",
                     keepalive_device_name

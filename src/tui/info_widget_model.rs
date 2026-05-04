@@ -105,7 +105,7 @@ pub(super) fn render_model_widget(data: &InfoWidgetData, inner: Rect) -> Vec<Lin
             AuthMethod::GeminiOAuth => ("🔐", "OAuth", rgb(120, 190, 255)),
             AuthMethod::OpenCodeGoApiKey => ("🔑", "API Key", rgb(150, 200, 255)),
             AuthMethod::Windsurf => ("🌊", "Auto-discovered", rgb(100, 180, 200)),
-            AuthMethod::Unknown => unreachable!(),
+            AuthMethod::Unknown => return lines,
         };
 
         if let Some(ref upstream) = data.upstream_provider {
@@ -207,7 +207,7 @@ pub(super) fn render_model_info(data: &InfoWidgetData, inner: Rect) -> Vec<Line<
                 AuthMethod::GeminiOAuth => ("🔐", "OAuth", rgb(120, 190, 255)),
                 AuthMethod::OpenCodeGoApiKey => ("🔑", "API Key", rgb(150, 200, 255)),
                 AuthMethod::Windsurf => ("🌊", "Auto-discovered", rgb(100, 180, 200)),
-                AuthMethod::Unknown => unreachable!(),
+                AuthMethod::Unknown => return lines,
             };
             if !detail_spans.is_empty() {
                 detail_spans.push(Span::styled(" · ", Style::default().fg(rgb(80, 80, 90))));

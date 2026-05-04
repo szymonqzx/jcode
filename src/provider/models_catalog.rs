@@ -1,5 +1,4 @@
 use super::*;
-use reqwest::RequestBuilder;
 
 #[derive(Debug, Clone, Default)]
 pub struct OpenAIModelCatalog {

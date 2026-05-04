@@ -2681,6 +2681,7 @@ dependencies = [
  "mermaid-rs-renderer",
  "open",
  "proctitle",
+ "prost 0.13.5",
  "pulldown-cmark 0.13.3",
  "qr2term",
  "rand 0.10.1",
@@ -2751,6 +2752,14 @@ name = "jcode-background-types"
 version = "0.1.0"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "jcode-base-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -2948,7 +2957,7 @@ name = "jcode-session-types"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "jcode-message-types",
+ "jcode-base-types",
  "serde",
 ]
 
@@ -3035,6 +3044,16 @@ name = "jcode-usage-types"
 version = "0.1.0"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "jcode-workflow-types"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "jcode-base-types",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -4687,7 +4706,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b82eaa1d779e9a4bc1c3217db8ffbeabaae1dca241bf70183242128d48681cd"
 dependencies = [
  "bytes",
- "prost-derive",
+ "prost-derive 0.11.9",
+]
+
+[[package]]
+name = "prost"
+version = "0.13.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2796faa41db3ec313a31f7624d9286acf277b52de526150b7e69f3debf891ee5"
+dependencies = [
+ "bytes",
+ "prost-derive 0.13.5",
 ]
 
 [[package]]
@@ -4701,6 +4730,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "prost-derive"
+version = "0.13.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
+dependencies = [
+ "anyhow",
+ "itertools 0.14.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -5289,6 +5331,7 @@ dependencies = [
  "rustls-platform-verifier",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "sync_wrapper",
  "tokio",
  "tokio-rustls",
@@ -5723,6 +5766,18 @@ version = "0.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf41e0cfaf7226dca15e8197172c295a782857fcb97fad1808a166870dee75a3"
 dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "serde_urlencoded"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3491c14715ca2294c4d6a88f15e84739788c1d030eed8c110436aafdaa2f3fd"
+dependencies = [
+ "form_urlencoded",
+ "itoa",
+ "ryu",
  "serde",
 ]
 
@@ -6850,7 +6905,7 @@ dependencies = [
  "log",
  "memmap2",
  "num-integer",
- "prost",
+ "prost 0.11.9",
  "smallvec",
  "tract-hir",
  "tract-nnef",

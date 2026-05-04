@@ -14,7 +14,7 @@ use base64::Engine;
 use bytemuck::{Pod, Zeroable};
 use glyphon::{
     Attrs, Buffer, Color as TextColor, Family, FontSystem, Metrics, Resolution, Shaping,
-    SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Wrap,
+    SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport, Wrap,
 };
 use render_helpers::*;
 use single_session::{
@@ -1640,7 +1640,13 @@ impl<'window> Canvas<'window> {
             if !text_buffers.is_empty()
                 && let Err(error) = self
                     .text_renderer
-                    .render(&self.text_atlas, &mut render_pass)
+                    .render(
+                        &self.text_atlas,
+                        &Viewport {
+                            offset: [0.0, 0.0],
+                        },
+                        &mut render_pass,
+                    )
             {
                 eprintln!("jcode-desktop: failed to render text: {error:?}");
             }

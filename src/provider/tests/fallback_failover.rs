@@ -178,6 +178,8 @@ fn test_set_model_rejects_cross_provider_without_creds() {
         gemini: RwLock::new(None),
         cursor: RwLock::new(None),
         openrouter: RwLock::new(None),
+        windsurf: RwLock::new(None),
+        opencode_go: RwLock::new(None),
         active: RwLock::new(ActiveProvider::OpenAI),
         use_claude_cli: false,
         startup_notices: RwLock::new(Vec::new()),
@@ -205,6 +207,8 @@ fn test_auto_default_prefers_openai_over_claude_when_both_available() {
         gemini: false,
         cursor: false,
         openrouter: false,
+        windsurf: false,
+        opencode_go: false,
         copilot_premium_zero: false,
     });
     assert_eq!(active, ActiveProvider::OpenAI);
@@ -220,6 +224,8 @@ fn test_auto_default_prefers_copilot_when_zero_premium_mode_enabled() {
         gemini: true,
         cursor: true,
         openrouter: true,
+        windsurf: false,
+        opencode_go: false,
         copilot_premium_zero: true,
     });
     assert_eq!(active, ActiveProvider::Copilot);
@@ -307,6 +313,8 @@ fn test_no_provider_error_mentions_tokens_and_details() {
         gemini: RwLock::new(None),
         cursor: RwLock::new(None),
         openrouter: RwLock::new(None),
+        windsurf: RwLock::new(None),
+        opencode_go: RwLock::new(None),
         active: RwLock::new(ActiveProvider::OpenAI),
         use_claude_cli: false,
         startup_notices: RwLock::new(Vec::new()),
