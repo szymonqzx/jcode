@@ -28,6 +28,7 @@ members = [
     "crates/jcode-tui-markdown",
     "crates/jcode-tui-core",
     "crates/jcode-tui-mermaid",
+    "crates/jcode-task-types",
     "crates/jcode-tui-render",
     "crates/jcode-terminal-launch",
     "crates/jcode-tui-workspace",
@@ -129,7 +130,6 @@ jcode-provider-openrouter = { path = "crates/jcode-provider-openrouter" }
 jcode-provider-gemini = { path = "crates/jcode-provider-gemini" }
 jcode-tui-markdown = { path = "crates/jcode-tui-markdown" }
 jcode-tui-core = { path = "crates/jcode-tui-core" }
-jcode-tui-mermaid = { path = "crates/jcode-tui-mermaid" }
 jcode-tui-render = { path = "crates/jcode-tui-render", optional = true }
 jcode-terminal-launch = { path = "crates/jcode-terminal-launch" }
 jcode-tui-workspace = { path = "crates/jcode-tui-workspace" }
