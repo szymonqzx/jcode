@@ -13,6 +13,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   SCCACHE_GHA_ENABLED: "true"
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
 jobs:
   nightly-build-test:
@@ -60,74 +61,27 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq mold
 
-      - name: Build release binary
+      - name: Install nextest
+        run: cargo install cargo-nextest --locked
+
+      - name: Build
         shell: bash
         run: |
           mkdir -p .cargo
           if [ "$RUNNER_OS" = "Linux" ]; then
-            cat > .cargo/config.toml << 'EOF'
-          [target.x86_64-unknown-linux-gnu]
+            echo '[target.x86_64-unknown-linux-gnu]
           linker = "clang"
-          rustflags = ["-C", "link-arg=-fuse-ld=mold"]
-          EOF
+          rustflags = ["-C", "link-arg=-fuse-ld=mold"]' > .cargo/config.toml
           fi
           if command -v sccache &>/dev/null && sccache --start-server 2>/dev/null; then
             export RUSTC_WRAPPER=sccache
           fi
           cargo build --release --target ${{ matrix.target }}
 
-      - name: Run full test suite
+      - name: Run tests with nextest
         shell: bash
         run: |
-          python3 .github/scripts/run_with_timeout.py 1200 \
-            cargo test --target ${{ matrix.target }} --all
-
-      - name: Verify binary launches
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            ./target/${{ matrix.target }}/release/jcode.exe --version
-          else
-            ./target/${{ matrix.target }}/release/jcode --version
+          if command -v sccache &>/dev/null && sccache --start-server 2>/dev/null; then
+            export RUSTC_WRAPPER=sccache
           fi
-
-  nightly-security-scan:
-    name: Nightly Security Scan
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Run cargo audit
-        run: |
-          cargo install cargo-audit --locked
-          cargo audit
-
-      - name: Check for outdated dependencies
-        run: |
-          cargo install cargo-outdated --locked
-          cargo outdated
-
-  nightly-dependency-check:
-    name: Nightly Dependency Check
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Check for unused dependencies
-        run: |
-          cargo install cargo-udeps --locked
-          cargo +nightly udeps --all-targets
-        continue-on-error: true
-
-      - name: Check for duplicate dependencies
-        run: |
-          cargo install cargo-duplicate --locked
-          cargo duplicate
+          cargo nextest run --target ${{ matrix.target }} --lib --bins

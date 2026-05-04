@@ -1,8 +1,8 @@
 [package]
 name = "jcode"
 version = "0.11.4"
-description = "Possibly the greatest coding agent ever built — blazing-fast TUI, multi-model, swarm coordination, 30+ tools"
 edition = "2024"
+description = "Possibly the greatest coding agent ever built — blazing-fast TUI, multi-model, swarm coordination, 30+ tools"
 
 [workspace]
 members = [
@@ -34,9 +34,7 @@ members = [
     "crates/jcode-usage-types",
     "crates/jcode-tui-core",
     "crates/jcode-tui-mermaid",
-    "crates/jcode-task-types",
     "crates/jcode-tui-render",
-    "crates/jcode-task-types",
     "crates/jcode-terminal-launch",
     "crates/jcode-tui-workspace",
     "crates/jcode-mobile-core",
@@ -61,57 +59,46 @@ name = "jcode-harness"
 path = "src/bin/harness.rs"
 
 [dependencies]
-# Memory allocator (reduces fragmentation for long-running server)
 tikv-jemallocator = { version = "0.6", features = ["unprefixed_malloc_on_supported_platforms"], optional = true }
 tikv-jemalloc-ctl = { version = "0.6", optional = true }
 tikv-jemalloc-sys = { version = "0.6", optional = true }
 
-# Async runtime
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net", "time", "process", "sync", "fs"] }
 futures = "0.3"
 async-trait = "0.1"
 
-# HTTP client
 reqwest = { version = "0.13", features = ["json", "stream"] }
 tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "rustls-tls-native-roots"] }
 
-# Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
 toml = "0.8"
 
-# CLI
 clap = { version = "4", features = ["derive"] }
 
-# File operations
 glob = "0.3"
-ignore = "0.4"           # gitignore-aware file walking
+ignore = "0.4"
 walkdir = "2"
-similar = "3"            # diffing for edits
+similar = "3"
 
-# Utilities
-dirs = "6"               # home directory
+dirs = "6"
 anyhow = "1"
-libc = "0.2"             # Unix system calls (flock)
+libc = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
 regex = "1"
 uuid = { version = "1", features = ["v4", "v5"] }
 
-# Embeddings (local inference) - behind feature flag (163 crates, slow to compile)
-jcode-embedding = { path = "crates/jcode-embedding", optional = true }
-jcode-gateway-types = { path = "crates/jcode-gateway-types" }
-
-# OAuth
 base64 = "0.22"
 sha2 = "0.11"
 rand = "0.10"
 hex = "0.4"
 url = "2"
-open = "5"               # Open URLs in browser
+open = "5"
 rusqlite = { version = "0.39", features = ["bundled"] }
-proctitle = "0.1"        # Process title setting
-urlencoding = "2"        # URL encoding/decoding
+proctitle = "0.1"
+urlencoding = "2"
+
 jcode-auth-types = { path = "crates/jcode-auth-types" }
 jcode-azure-auth = { path = "crates/jcode-azure-auth" }
 jcode-agent-runtime = { path = "crates/jcode-agent-runtime" }
@@ -128,26 +115,21 @@ jcode-terminal-launch = { path = "crates/jcode-terminal-launch" }
 jcode-tui-workspace = { path = "crates/jcode-tui-workspace" }
 jcode-usage-types = { path = "crates/jcode-usage-types" }
 
-# Streaming
 tokio-stream = "0.1"
 bytes = "1"
 
-# TUI
 ratatui = { version = "0.30", default-features = false, features = ["crossterm", "all-widgets"], optional = true }
 crossterm = { version = "0.29", features = ["event-stream"], optional = true }
-arboard = { version = "3", optional = true }              # Clipboard support
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"], optional = true }  # Only PNG/JPEG (skip avif/rav1e, exr, gif, tiff, etc)
+arboard = { version = "3", optional = true }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"], optional = true }
 ratatui-image = { version = "10.0.6", default-features = false, features = ["crossterm"], optional = true }
 resvg = { version = "0.47", optional = true }
 usvg = { version = "0.47", optional = true }
-
-# Markdown & syntax highlighting
 pulldown-cmark = { version = "0.13", optional = true }
 mermaid-rs-renderer = { git = "https://github.com/1jehuang/mermaid-rs-renderer.git", tag = "v0.2.1", optional = true }
 syntect = { version = "5", default-features = false, features = ["default-syntaxes", "default-themes", "regex-fancy"], optional = true }
-unicode-width = { version = "0.2", optional = true }   # Unicode character display width
+unicode-width = { version = "0.2", optional = true }
 
-# PDF parsing (behind feature flag)
 jcode-pdf = { path = "crates/jcode-pdf", optional = true }
 jcode-background-types = { path = "crates/jcode-background-types" }
 jcode-batch-types = { path = "crates/jcode-batch-types" }
@@ -162,7 +144,6 @@ jcode-session-types = { path = "crates/jcode-session-types" }
 jcode-task-types = { path = "crates/jcode-task-types" }
 jcode-side-panel-types = { path = "crates/jcode-side-panel-types" }
 
-# Archive extraction (for auto-update)
 flate2 = "1"
 tar = "0.4"
 tempfile = "3"
@@ -208,9 +189,9 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_
 global-hotkey = "0.8"
 
 [profile.release]
-opt-level = 2
+opt-level = 3
 debug = 0
-codegen-units = 16
+codegen-units = 1
 incremental = true
 split-debuginfo = "packed"
 
@@ -219,10 +200,10 @@ inherits = "release"
 opt-level = 1
 incremental = true
 
-# Full LTO release for stable/distribution builds
 [profile.release-lto]
 inherits = "release"
 lto = "thin"
+opt-level = 3
 codegen-units = 16
 incremental = false
 
@@ -236,6 +217,12 @@ split-debuginfo = "off"
 [profile.dev.package."*"]
 opt-level = 1
 codegen-units = 256
+
+[profile.dev.package."ratatui"]
+opt-level = 2
+
+[profile.dev.package."crossterm"]
+opt-level = 2
 
 [profile.test]
 debug = 0

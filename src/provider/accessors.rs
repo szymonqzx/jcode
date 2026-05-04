@@ -1,44 +1,54 @@
 use super::*;
 
+/// Read helper that tolerates a poisoned RwLock (common during provider auth panics)
+macro_rules! read_provider {
+    ($r:expr) => {
+        match $r.read() {
+            Ok(guard) => guard.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
+    };
+}
+
 impl MultiProvider {
     pub(super) fn claude_provider(&self) -> Option<Arc<claude::ClaudeProvider>> {
-        self.claude.read().unwrap().clone()
+        read_provider!(self.claude)
     }
 
     pub(super) fn anthropic_provider(&self) -> Option<Arc<anthropic::AnthropicProvider>> {
-        self.anthropic.read().unwrap().clone()
+        read_provider!(self.anthropic)
     }
 
     pub(super) fn openai_provider(&self) -> Option<Arc<openai::OpenAIProvider>> {
-        self.openai.read().unwrap().clone()
+        read_provider!(self.openai)
     }
 
     pub(super) fn antigravity_provider(&self) -> Option<Arc<antigravity::AntigravityCliProvider>> {
-        self.antigravity.read().unwrap().clone()
+        read_provider!(self.antigravity)
     }
 
     pub(super) fn gemini_provider(&self) -> Option<Arc<gemini::GeminiProvider>> {
-        self.gemini.read().unwrap().clone()
+        read_provider!(self.gemini)
     }
 
     pub(super) fn copilot_provider(&self) -> Option<Arc<copilot::CopilotApiProvider>> {
-        self.copilot_api.read().unwrap().clone()
+        read_provider!(self.copilot_api)
     }
 
     pub(super) fn cursor_provider(&self) -> Option<Arc<cursor::CursorCliProvider>> {
-        self.cursor.read().unwrap().clone()
+        read_provider!(self.cursor)
     }
 
     pub(super) fn windsurf_provider(&self) -> Option<Arc<windsurf::WindsurfProvider>> {
-        self.windsurf.read().unwrap().clone()
+        read_provider!(self.windsurf)
     }
 
     pub(super) fn openrouter_provider(&self) -> Option<Arc<openrouter::OpenRouterProvider>> {
-        self.openrouter.read().unwrap().clone()
+        read_provider!(self.openrouter)
     }
 
     pub(super) fn opencode_go_provider(&self) -> Option<Arc<opencode_go::OpenCodeGoProvider>> {
-        self.opencode_go.read().unwrap().clone()
+        read_provider!(self.opencode_go)
     }
 
     pub(super) fn has_claude_runtime(&self) -> bool {

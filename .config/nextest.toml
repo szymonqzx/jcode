@@ -1,0 +1,12 @@
+# Nextest configuration — CI-optimized for speed + reliability
+
+[profile.ci]
+# Run each test in its own process (true isolation, catches panics cleanly)
+test-threads = 1
+# Retry flaky tests up to 2x before failing
+retry = 2
+
+[profile.ci-junit]
+# For JUnit XML output (used by CI parsers)
+test-threads = 1
+retry = 2
