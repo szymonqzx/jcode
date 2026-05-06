@@ -9,7 +9,7 @@
 The next generation coding agent harness to raise the skill ceiling. Built for multi-session workflows, infinite customizability, and performance.
 
 > **Note:** This fork is primarily developed and tested on Windows. Linux compatibility is not actively tested but should work due to the cross-platform Rust foundation.
-
+> **PROJECT CURRENTLY IS IN A NOT WORKING STATE**
 ---
 
 ## Installation
