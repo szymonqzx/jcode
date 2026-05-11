@@ -2831,6 +2831,7 @@ version = "0.1.0"
 name = "jcode-message-types"
 version = "0.1.0"
 dependencies = [
+ "jcode-base-types",
  "serde",
  "serde_json",
 ]
@@ -3021,7 +3022,7 @@ dependencies = [
  "resvg 0.46.0",
  "serde",
  "serde_json",
- "usvg 0.46.0",
+ "usvg 0.47.0",
 ]
 
 [[package]]
