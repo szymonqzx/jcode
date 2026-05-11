@@ -150,7 +150,7 @@ usvg = { version = "0.47", optional = true }
 
 # Markdown & syntax highlighting
 pulldown-cmark = { version = "0.13", optional = true }
-mermaid-rs-renderer = { git = "https://github.com/1jehuang/mermaid-rs-renderer.git", tag = "v0.2.1", optional = true }
+mermaid-rs-renderer = { git = "https://github.com/1jehuang/mermaid-rs-renderer.git", tag = "v0.2.2", optional = true }
 syntect = { version = "5", default-features = false, features = ["default-syntaxes", "default-themes", "regex-fancy"], optional = true }
 unicode-width = { version = "0.2", optional = true }   # Unicode character display width
 
