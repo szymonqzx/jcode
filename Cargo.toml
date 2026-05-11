@@ -103,7 +103,7 @@ libc = "0.2"             # Unix system calls (flock)
 chrono = { version = "0.4", features = ["serde"] }
 regex = "1"
 uuid = { version = "1", features = ["v4", "v5"] }
-prost = "0.13"          # Protocol buffers for windsurf provider
+prost = "0.14"          # Protocol buffers for windsurf provider
 
 # Embeddings (local inference) - behind feature flag (163 crates, slow to compile)
 jcode-embedding = { path = "crates/jcode-embedding", optional = true }
